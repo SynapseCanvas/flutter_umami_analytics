@@ -256,9 +256,29 @@ Hexagonal (ports & adapters). The `domain/` layer is pure Dart with no Flutter, 
 
 Full diagrams (component graph, tracking flow, queue state machine, dependency graph) in [`doc/architecture.md`](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/architecture.md).
 
-## Documentación
+## Documentation
 
-Guías detalladas en español en [`doc/es/`](https://github.com/SynapseCanvas/flutter_umami_analytics/tree/main/doc/es):
+Detailed guides available in **English** and **Spanish**.
+
+### English
+
+Guides in [`doc/en/`](https://github.com/SynapseCanvas/flutter_umami_analytics/tree/main/doc/en):
+
+- [Initialization](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/1-initialization.md) — `createUmamiAnalytics()`, `FlutterUmamiConfig`, multi-instance, lifecycle.
+- [Offline Queue](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/2-queue.md) — strategies (`disabled`, `inMemory`, `persisted`), auto-flush, manual flush.
+- [Tracking](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/3-tracking.md) — `trackPageView` and `trackEvent`, parameters, automatic payload.
+- [NavigatorObserver](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/4-observer.md) — `UmamiNavigatorObserver` for automatic navigation tracking.
+- [Session Identification](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/5-identify.md) — `identify()`, lazy `sessionId` management.
+- [Overrides](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/6-overrides.md) — per-call `overrides`, `firstReferrer`, `ipAddress`.
+- [Device](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/7-device.md) — persistent device ID, device info, per-platform User-Agent.
+- [Logging](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/8-logging.md) — `UmamiLogger`, levels, custom sink callback.
+- [REST API Client](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/9-api-client.md) — REST client to query Umami.
+- [Advanced](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/10-advanced.md) — `first_open` event, custom collector, custom HTTP client, exposed members.
+- [Architecture](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/architecture.md) — hexagonal architecture diagrams, tracking flow, queue state machine.
+
+### Español
+
+Guías detalladas en [`doc/es/`](https://github.com/SynapseCanvas/flutter_umami_analytics/tree/main/doc/es):
 
 - [Inicialización](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/1-initialization.md) — `createUmamiAnalytics()`, `FlutterUmamiConfig`, multiinstancia, ciclo de vida.
 - [Cola](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/2-queue.md) — estrategias (`disabled`, `inMemory`, `persisted`), vaciado automático, vaciado manual.
