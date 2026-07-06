@@ -1,0 +1,38 @@
+name: flutter_umami_analytics
+description: Flutter client for Umami Analytics. Track page views, events, and sessions with offline queue, NavigatorObserver, persistent device ID, and optional REST API.
+version: 1.0.0
+homepage: https://github.com/SynapseCanvas/flutter_umami_analytics
+repository: https://github.com/SynapseCanvas/flutter_umami_analytics
+documentation: https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/README.md
+
+topics:
+  - umami
+  - analytics
+  - tracking
+  - privacy
+  - umami-analytics
+
+environment:
+  sdk: ^3.4.0
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  uuid: ^4.2.0
+  sqflite: ^2.4.1
+  path: ^1.9.0
+  flutter_secure_storage: ^10.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+platforms:
+  android:
+  ios:
+  macos:
+  windows:
+  linux:
