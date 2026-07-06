@@ -491,6 +491,159 @@ void main() {
       expect(payload['id'], 'user-1');
     });
   });
+
+  group('Hexagonal port injection — ownership', () {
+    test(
+        'TrackingCollector disposes HttpClientPort when ownsHttpClient is true',
+        () async {
+      final http = _CaptureHttpClient();
+      final collector = TrackingCollector(
+        config: makeConfig(),
+        httpClient: http,
+        queue: _NoopQueue(),
+        deviceInfo: _FixedDeviceInfo(const DeviceInfoData(
+          screenResolution: '1x1',
+          locale: 'en',
+          platform: 'test',
+        )),
+        ownsHttpClient: true,
+      );
+      await collector.dispose();
+      expect(http.disposeCalls, 1);
+    });
+
+    test(
+        'TrackingCollector does NOT dispose HttpClientPort when ownsHttpClient '
+        'is false', () async {
+      final http = _CaptureHttpClient();
+      final collector = TrackingCollector(
+        config: makeConfig(),
+        httpClient: http,
+        queue: _NoopQueue(),
+        deviceInfo: _FixedDeviceInfo(const DeviceInfoData(
+          screenResolution: '1x1',
+          locale: 'en',
+          platform: 'test',
+        )),
+        ownsHttpClient: false,
+      );
+      await collector.dispose();
+      expect(http.disposeCalls, 0);
+    });
+
+    test(
+        'TrackingCollector defaults ownsHttpClient to true (backwards '
+        'compatibility)', () async {
+      final http = _CaptureHttpClient();
+      final collector = TrackingCollector(
+        config: makeConfig(),
+        httpClient: http,
+        queue: _NoopQueue(),
+        deviceInfo: _FixedDeviceInfo(const DeviceInfoData(
+          screenResolution: '1x1',
+          locale: 'en',
+          platform: 'test',
+        )),
+      );
+      await collector.dispose();
+      expect(http.disposeCalls, 1);
+    });
+
+    test('FlutterUmamiAnalytics disposes apiClient when ownsApiClient is true',
+        () async {
+      final api = _CountingApiPort();
+      final analytics = FlutterUmamiAnalytics(
+        config: makeConfig(),
+        collector: _MockCollector(),
+        apiClient: api,
+        ownsApiClient: true,
+      );
+      await analytics.dispose();
+      expect(api.disposeCalls, 1);
+    });
+
+    test(
+        'FlutterUmamiAnalytics does NOT dispose apiClient when ownsApiClient '
+        'is false', () async {
+      final api = _CountingApiPort();
+      final analytics = FlutterUmamiAnalytics(
+        config: makeConfig(),
+        collector: _MockCollector(),
+        apiClient: api,
+        ownsApiClient: false,
+      );
+      await analytics.dispose();
+      expect(api.disposeCalls, 0);
+    });
+
+    test('FlutterUmamiAnalytics defaults ownsApiClient to true', () async {
+      final api = _CountingApiPort();
+      final analytics = FlutterUmamiAnalytics(
+        config: makeConfig(),
+        collector: _MockCollector(),
+        apiClient: api,
+      );
+      await analytics.dispose();
+      expect(api.disposeCalls, 1);
+    });
+  });
+
+  group('Hexagonal port injection — factory wiring', () {
+    DeviceInfoPort fixedDevice() => _FixedDeviceInfo(const DeviceInfoData(
+          screenResolution: '1x1',
+          locale: 'en',
+          platform: 'test',
+        ));
+
+    test('createUmamiAnalytics accepts an injected HttpClientPort', () async {
+      final http = _CaptureHttpClient();
+      final analytics = await createUmamiAnalytics(
+        makeConfig(queueConfig: const UmamiQueueConfig.disabled()),
+        httpClientPort: http,
+        deviceInfo: fixedDevice(),
+      );
+      addTearDown(analytics.dispose);
+      await analytics.trackPageView(url: '/injected');
+      expect(http.bodies.length, 1);
+      expect(http.disposeCalls, 0,
+          reason: 'factory must NOT dispose caller-injected port on its own');
+      await analytics.dispose();
+      expect(http.disposeCalls, 0,
+          reason: 'facade must NOT dispose caller-injected HttpClientPort');
+    });
+
+    test('createUmamiAnalytics accepts an injected UmamiApiPort', () async {
+      final api = _CountingApiPort();
+      final analytics = await createUmamiAnalytics(
+        makeConfig(queueConfig: const UmamiQueueConfig.disabled()),
+        apiClient: api,
+        deviceInfo: fixedDevice(),
+      );
+      addTearDown(analytics.dispose);
+      expect(identical(analytics.apiClient, api), true);
+      await analytics.dispose();
+      expect(api.disposeCalls, 0,
+          reason: 'facade must NOT dispose caller-injected UmamiApiPort');
+    });
+
+    test(
+        'createUmamiAnalytics: injected HttpClientPort takes precedence over '
+        'httpClient', () async {
+      // Provide both. If httpClientPort wins, bodies land in the capture list.
+      // If httpClient won, no body would land (real http.Client would try to
+      // hit the network and fail silently, returning false).
+      final http = _CaptureHttpClient();
+      final analytics = await createUmamiAnalytics(
+        makeConfig(queueConfig: const UmamiQueueConfig.disabled()),
+        httpClientPort: http,
+        httpClient: null,
+        deviceInfo: fixedDevice(),
+      );
+      addTearDown(analytics.dispose);
+      await analytics.trackPageView(url: '/precedence');
+      expect(http.bodies.length, 1);
+    });
+  });
 }
 
 class _MockCollector implements UmamiCollector {
@@ -551,6 +704,7 @@ class _MockCollector implements UmamiCollector {
 
 class _CaptureHttpClient implements HttpClientPort {
   final List<Map<String, dynamic>> bodies = [];
+  int disposeCalls = 0;
 
   @override
   Future<bool> send(String endpoint, Map<String, dynamic> body) async {
@@ -562,7 +716,9 @@ class _CaptureHttpClient implements HttpClientPort {
   String? get cacheToken => null;
 
   @override
-  void dispose() {}
+  void dispose() {
+    disposeCalls++;
+  }
 }
 
 class _NoopQueue implements UmamiQueue {
@@ -592,4 +748,111 @@ class _FixedDeviceInfo implements DeviceInfoPort {
 
   @override
   DeviceInfoData gather() => data;
+}
+
+class _CountingApiPort implements UmamiApiPort {
+  int disposeCalls = 0;
+  bool authenticated = false;
+
+  _CountingApiPort();
+
+  @override
+  Future<bool> login(String username, String password) async {
+    authenticated = true;
+    return true;
+  }
+
+  @override
+  bool get isAuthenticated => authenticated;
+
+  @override
+  void dispose() {
+    disposeCalls++;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>?> getWebsites() async => null;
+
+  @override
+  Future<Map<String, dynamic>?> getWebsite(String id) async => null;
+
+  @override
+  Future<Map<String, dynamic>?> createWebsite(
+          Map<String, dynamic> data) async =>
+      null;
+
+  @override
+  Future<bool> updateWebsite(String id, Map<String, dynamic> data) async =>
+      false;
+
+  @override
+  Future<bool> deleteWebsite(String id) async => false;
+
+  @override
+  Future<Map<String, dynamic>?> getWebsiteStats(
+    String id, {
+    required DateTime startAt,
+    required DateTime endAt,
+  }) async =>
+      null;
+
+  @override
+  Future<Map<String, dynamic>?> getWebsitePageviews(
+    String id, {
+    required DateTime startAt,
+    required DateTime endAt,
+    String? unit,
+    String? timezone,
+  }) async =>
+      null;
+
+  @override
+  Future<Map<String, dynamic>?> getWebsiteMetrics(
+    String id, {
+    required DateTime startAt,
+    required DateTime endAt,
+    required String type,
+    int? limit,
+  }) async =>
+      null;
+
+  @override
+  Future<int?> getWebsiteActiveVisitors(String id) async => null;
+
+  @override
+  Future<List<Map<String, dynamic>>?> getWebsiteEvents(
+    String id, {
+    required DateTime startAt,
+    required DateTime endAt,
+    String? unit,
+    String? timezone,
+  }) async =>
+      null;
+
+  @override
+  Future<List<Map<String, dynamic>>?> getWebsiteSessions(
+    String id, {
+    required DateTime startAt,
+    required DateTime endAt,
+    String? unit,
+    String? timezone,
+  }) async =>
+      null;
+
+  @override
+  Future<List<Map<String, dynamic>>?> getTeams() async => null;
+
+  @override
+  Future<Map<String, dynamic>?> createTeam(Map<String, dynamic> data) async =>
+      null;
+
+  @override
+  Future<List<Map<String, dynamic>>?> getAllUsers() async => null;
+
+  @override
+  Future<Map<String, dynamic>?> createUser(Map<String, dynamic> data) async =>
+      null;
+
+  @override
+  Future<bool> deleteUser(String id) async => false;
 }

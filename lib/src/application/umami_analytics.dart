@@ -27,6 +27,7 @@ class FlutterUmamiAnalytics {
   final FlutterUmamiConfig config;
   final UmamiCollector _collector;
   final UmamiApiPort? apiClient;
+  final bool _ownsApiClient;
   bool _disposed = false;
 
   /// Builds a facade wired to a [collector] and (optionally) an [apiClient].
@@ -34,11 +35,18 @@ class FlutterUmamiAnalytics {
   /// Required: [config] (drives every call) and [collector] (the underlying
   /// port). [apiClient] is only set when `enableApi: true` was passed to
   /// [createUmamiAnalytics]; otherwise it stays `null`.
+  ///
+  /// Set [ownsApiClient] to `false` when the caller injects a shared
+  /// [UmamiApiPort] that must outlive this facade (e.g. an app-wide REST
+  /// adapter). When `true` (default), the facade disposes the api client in
+  /// [dispose].
   FlutterUmamiAnalytics({
     required this.config,
     required UmamiCollector collector,
     this.apiClient,
-  }) : _collector = collector;
+    bool ownsApiClient = true,
+  })  : _collector = collector,
+        _ownsApiClient = ownsApiClient;
 
   /// Convenience accessor for [FlutterUmamiConfig.logger].
   UmamiLogger get logger => config.logger;
@@ -148,16 +156,18 @@ class FlutterUmamiAnalytics {
   /// Releases resources owned by the facade.
   ///
   /// Flushes are NOT automatic; call [flush] first if you need them. Then
-  /// [dispose] closes the collector (which closes the queue and HTTP client)
-  /// and disposes the [apiClient] if present. Idempotent: subsequent calls
-  /// are no-ops.
+  /// [dispose] closes the collector (which closes the queue and HTTP client
+  /// when the collector owns it) and disposes the [apiClient] when the facade
+  /// owns it. Idempotent: subsequent calls are no-ops.
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
     try {
       await _collector.dispose();
     } finally {
-      apiClient?.dispose();
+      if (_ownsApiClient) {
+        apiClient?.dispose();
+      }
     }
   }
 }

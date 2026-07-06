@@ -18,6 +18,7 @@ class TrackingCollector implements UmamiCollector {
 
   final FlutterUmamiConfig _config;
   final HttpClientPort _httpClient;
+  final bool _ownsHttpClient;
   final UmamiLogger _logger;
   final UmamiQueue _queue;
   final DeviceInfoPort _deviceInfo;
@@ -26,13 +27,22 @@ class TrackingCollector implements UmamiCollector {
   String? _sessionId;
   bool _flushing = false;
 
+  /// Builds a collector wired to a [config], an [httpClient] port, a [queue],
+  /// and a [deviceInfo] provider.
+  ///
+  /// Set [ownsHttpClient] to `false` when the caller injects a shared
+  /// [HttpClientPort] that must outlive this collector (e.g. an app-wide HTTP
+  /// adapter). When `true` (default), the collector disposes the port in
+  /// [dispose].
   TrackingCollector({
     required FlutterUmamiConfig config,
     required HttpClientPort httpClient,
     required UmamiQueue queue,
     required DeviceInfoPort deviceInfo,
+    bool ownsHttpClient = true,
   })  : _config = config,
         _httpClient = httpClient,
+        _ownsHttpClient = ownsHttpClient,
         _logger = config.logger,
         _queue = queue,
         _deviceInfo = deviceInfo,
@@ -195,7 +205,9 @@ class TrackingCollector implements UmamiCollector {
       onError: (e) => _logger.warning('Flush on dispose failed: $e'),
     );
     await _queue.close();
-    _httpClient.dispose();
+    if (_ownsHttpClient) {
+      _httpClient.dispose();
+    }
   }
 
   UmamiPayload _buildPayload(

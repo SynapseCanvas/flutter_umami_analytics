@@ -12,8 +12,10 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_umami_analytics/src/application/umami_analytics.dart';
 import 'package:flutter_umami_analytics/src/domain/logger/umami_logger.dart';
 import 'package:flutter_umami_analytics/src/domain/models/umami_config.dart';
+import 'package:flutter_umami_analytics/src/domain/ports/api_port.dart';
 import 'package:flutter_umami_analytics/src/domain/ports/device_id_port.dart';
 import 'package:flutter_umami_analytics/src/domain/ports/device_info_port.dart';
+import 'package:flutter_umami_analytics/src/domain/ports/http_client_port.dart';
 import 'package:flutter_umami_analytics/src/infrastructure/api/umami_api_client.dart';
 import 'package:flutter_umami_analytics/src/infrastructure/collector/tracking_collector.dart';
 import 'package:flutter_umami_analytics/src/infrastructure/device/device_id_service.dart';
@@ -30,11 +32,25 @@ const _kFirstOpenUrl = '/app/launch';
 /// (optionally) the API client is authenticated by the time the UI mounts.
 /// Async: awaits queue opening and optional API login.
 ///
+/// Hexagonal injection — any port may be supplied by the caller. Injected ports
+/// are NOT disposed by the facade (caller owns their lifecycle); the factory
+/// only disposes ports it built internally.
+///
 /// Params:
 /// - [config] (required): drives every adapter and the facade.
-/// - [httpClient] (optional): inject to reuse connections or in tests;
-///   otherwise a new `http.Client()` is created internally and disposed by
-///   the facade.
+/// - [httpClientPort] (optional): inject a custom [HttpClientPort] for the
+///   tracking collector (e.g. an adapter built on `dio`, `cronet_http`, etc.).
+///   Takes precedence over [httpClient]; when set, [httpClient] is ignored for
+///   tracking. Caller owns the lifecycle.
+/// - [httpClient] (optional): inject a `package:http` [http.Client] to reuse
+///   connections or in tests; otherwise a new `http.Client()` is created
+///   internally and disposed by the facade. Shared between the tracking
+///   collector (via [DefaultHttpClient]) and the REST API client
+///   ([UmamiApiClient]) when both apply.
+/// - [apiClient] (optional): inject a pre-built, optionally pre-authenticated
+///   [UmamiApiPort] for the management REST endpoints. Takes precedence over
+///   [enableApi]; when set, [enableApi], [apiUsername] and [apiPassword] are
+///   ignored and no login is attempted. Caller owns the lifecycle.
 /// - [deviceId] (optional): inject for testing; otherwise a
 ///   [DefaultDeviceIdService] keyed by [FlutterUmamiConfig.instanceName].
 /// - [deviceInfo] (optional): inject for testing; otherwise a
@@ -52,7 +68,9 @@ const _kFirstOpenUrl = '/app/launch';
 /// [FlutterUmamiAnalytics.dispose] when finished.
 Future<FlutterUmamiAnalytics> createUmamiAnalytics(
   FlutterUmamiConfig config, {
+  HttpClientPort? httpClientPort,
   http.Client? httpClient,
+  UmamiApiPort? apiClient,
   DeviceIdPort? deviceId,
   DeviceInfoPort? deviceInfo,
   bool recordFirstOpen = false,
@@ -62,25 +80,44 @@ Future<FlutterUmamiAnalytics> createUmamiAnalytics(
 }) async {
   final logger = config.logger;
 
-  final httpAdapter = DefaultHttpClient(
-    client: httpClient,
-    logger: logger,
-    timeout: config.httpTimeout,
-  );
+  final HttpClientPort httpAdapter;
+  final bool ownsHttpAdapter;
+  if (httpClientPort != null) {
+    httpAdapter = httpClientPort;
+    ownsHttpAdapter = false;
+  } else {
+    httpAdapter = DefaultHttpClient(
+      client: httpClient,
+      logger: logger,
+      timeout: config.httpTimeout,
+    );
+    ownsHttpAdapter = true;
+  }
 
   final queue =
       createQueue(config.queueConfig, instanceName: config.instanceName);
   final collector = TrackingCollector(
     config: config,
     httpClient: httpAdapter,
+    ownsHttpClient: ownsHttpAdapter,
     queue: queue,
     deviceInfo: deviceInfo ?? DefaultDeviceInfoService(),
   );
 
-  final apiClient = enableApi
-      ? await _initApiClient(
-          config.endpoint, logger, httpClient, apiUsername, apiPassword)
-      : null;
+  final UmamiApiPort? resolvedApi;
+  final bool ownsApiClient;
+  if (apiClient != null) {
+    resolvedApi = apiClient;
+    ownsApiClient = false;
+    logger.info('Using injected UmamiApiPort; skipping login');
+  } else if (enableApi) {
+    resolvedApi = await _initApiClient(
+        config.endpoint, logger, httpClient, apiUsername, apiPassword);
+    ownsApiClient = true;
+  } else {
+    resolvedApi = null;
+    ownsApiClient = true;
+  }
 
   if (recordFirstOpen) {
     final deviceIdService =
@@ -95,7 +132,8 @@ Future<FlutterUmamiAnalytics> createUmamiAnalytics(
   return FlutterUmamiAnalytics(
     config: config,
     collector: collector,
-    apiClient: apiClient,
+    apiClient: resolvedApi,
+    ownsApiClient: ownsApiClient,
   );
 }
 
