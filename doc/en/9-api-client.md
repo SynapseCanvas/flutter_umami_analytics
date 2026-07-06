@@ -4,6 +4,8 @@ Optional client for querying the admin/analytics endpoints of your Umami v2 inst
 
 It implements the `UmamiApiPort` (`domain` layer). The default implementation is `UmamiApiClient` (`infrastructure` layer), built by [createUmamiAnalytics()].
 
+> 🔐 Requires **Umami admin credentials** (exchanged for an in-memory JWT). Read [11-credentials-security.md](11-credentials-security.md) before integrating.
+
 ## Enabling
 
 ```dart

@@ -27,6 +27,8 @@ final analytics = await createUmamiAnalytics(
 | `apiUsername`     | `String?`            | `null`         | Auto-login en `createUmamiAnalytics()` sólo cuando **ambos** `apiUsername` y `apiPassword` están presentes                 |
 | `apiPassword`     | `String?`            | `null`         | Contraseña para auto-login. Si el login falla o lanza, `apiClient` queda en `null` (degradación graceful)                  |
 
+> 🔐 **Seguridad**: `apiUsername`/`apiPassword` son **secretos**. Nunca los hardcodes; usa `--dart-define` o `flutter_secure_storage`. Ver [11-credentials-security.md](11-credentials-security.md).
+
 ### Campos de `FlutterUmamiConfig`
 
 | Campo           | Tipo               | Predeterminado     | Descripción                                                                                                                                                                                            |

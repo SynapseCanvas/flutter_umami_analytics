@@ -114,15 +114,15 @@ await analytics.dispose();
 
 ### `createUmamiAnalytics` options
 
-| Parameter         | Type              | Default | Description                                                                 |
-| ----------------- | ----------------- | ------- | --------------------------------------------------------------------------- |
-| `httpClient`      | `http.Client?`    | default | Custom HTTP client (timeouts, certs, proxy, cache)                          |
-| `deviceId`        | `DeviceIdPort?`   | default | Custom device ID service (only used when `recordFirstOpen`)                 |
-| `deviceInfo`      | `DeviceInfoPort?` | default | Custom device info provider (locale, screen, UA)                            |
-| `recordFirstOpen` | `bool`            | `false` | Send `first_open` event on first launch (persisted flag, URL `/app/launch`) |
-| `enableApi`       | `bool`            | `false` | Enable REST API client (`analytics.apiClient`)                              |
-| `apiUsername`     | `String?`         | `null`  | Auto-login on init when paired with `apiPassword`                           |
-| `apiPassword`     | `String?`         | `null`  | Password for auto-login                                                     |
+| Parameter         | Type              | Default | Description                                                                                                          |
+| ----------------- | ----------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
+| `httpClient`      | `http.Client?`    | default | Custom HTTP client (timeouts, certs, proxy, cache)                                                                   |
+| `deviceId`        | `DeviceIdPort?`   | default | Custom device ID service (only used when `recordFirstOpen`)                                                          |
+| `deviceInfo`      | `DeviceInfoPort?` | default | Custom device info provider (locale, screen, UA)                                                                     |
+| `recordFirstOpen` | `bool`            | `false` | Send `first_open` event on first launch (persisted flag, URL `/app/launch`)                                          |
+| `enableApi`       | `bool`            | `false` | Enable REST API client (`analytics.apiClient`)                                                                       |
+| `apiUsername`     | `String?`         | `null`  | Auto-login on init when paired with `apiPassword` (**secret**, see [Credentials & Security](#credentials--security)) |
+| `apiPassword`     | `String?`         | `null`  | Password for auto-login (**secret**, see [Credentials & Security](#credentials--security))                           |
 
 ## Exposed instance members
 
@@ -230,6 +230,42 @@ Methods on `UmamiApiPort`:
 
 `analytics.dispose()` closes the API client too.
 
+## Credentials & Security
+
+The SDK handles two distinct pipelines with very different security profiles:
+
+| Pipeline       | Endpoint                          | Auth required?   | What you provide                                |
+| -------------- | --------------------------------- | ---------------- | ----------------------------------------------- |
+| **Tracking**   | `POST /api/send`                  | ❌ **Anonymous** | `websiteId` + `endpoint` only                   |
+| **REST admin** | `/api/websites/*`, `/api/admin/*` | ✅ Admin session | `apiUsername` + `apiPassword` → JWT (in-memory) |
+
+**Key facts:**
+
+- **No static API keys.** Umami v2 does not issue them. The REST admin flow is `username + password → login() → JWT`.
+- **Credentials are never persisted** by the SDK — neither to disk, SQLite, nor `flutter_secure_storage`. The JWT lives in RAM only and is discarded on `dispose()`.
+- **Tracking is anonymous.** `trackPageView`, `trackEvent`, `identify`, and `NavigatorObserver` do **not** require any credentials.
+- `userId` and `ipAddress` are **tracking parameters**, not credentials.
+
+**Do not hardcode secrets.** Use `--dart-define` or `flutter_secure storage`:
+
+```dart
+final analytics = await createUmamiAnalytics(
+  config,
+  enableApi: true,
+  apiUsername: const String.fromEnvironment('UMAMI_API_USER'),
+  apiPassword: const String.fromEnvironment('UMAMI_API_PASS'),
+);
+```
+
+Quick production checklist:
+
+- [ ] No `apiUsername`/`apiPassword` literals in `lib/`
+- [ ] `.env` and secret files in `.gitignore`
+- [ ] `endpoint` is `https://`
+- [ ] `logger.minLevel` is **not** `verbose` in production (would leak payloads)
+
+Full guide: [`doc/en/11-credentials-security.md`](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/11-credentials-security.md) (or [`doc/es/11-credentials-security.md`](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/11-credentials-security.md)).
+
 ## Per-call overrides
 
 Every tracking method accepts an `overrides` map merged into the config for that single call:
@@ -274,6 +310,7 @@ Guides in [`doc/en/`](https://github.com/SynapseCanvas/flutter_umami_analytics/t
 - [Logging](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/8-logging.md) — `UmamiLogger`, levels, custom sink callback.
 - [REST API Client](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/9-api-client.md) — REST client to query Umami.
 - [Advanced](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/10-advanced.md) — `first_open` event, custom collector, custom HTTP client, exposed members.
+- [Credentials & Security](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/en/11-credentials-security.md) — secrets table, JWT flow, hardening checklist.
 - [Architecture](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/architecture.md) — hexagonal architecture diagrams, tracking flow, queue state machine.
 
 ### Español
@@ -290,6 +327,7 @@ Guías detalladas en [`doc/es/`](https://github.com/SynapseCanvas/flutter_umami_
 - [Registro](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/8-logging.md) — `UmamiLogger`, niveles, devolución de llamada personalizada.
 - [Cliente API](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/9-api-client.md) — cliente REST para consultar Umami.
 - [Avanzado](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/10-advanced.md) — evento `first_open`, collector personalizado, cliente HTTP personalizado, componentes expuestos.
+- [Credenciales y seguridad](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/11-credentials-security.md) — tabla de secretos, flujo del JWT, checklist de endurecimiento.
 - [Arquitectura](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/architecture.md) — diagramas de la arquitectura hexagonal, flujo de seguimiento, máquina de estados de la cola.
 
 ## Contributing

@@ -4,6 +4,8 @@ Cliente opcional para consultar endpoints admin/analytics de tu instancia Umami 
 
 Implementa el port `UmamiApiPort` (capa `domain`). La implementación por defecto es `UmamiApiClient` (capa `infrastructure`), construida por [createUmamiAnalytics()].
 
+> 🔐 Requiere **credenciales admin de Umami** (intercambiadas por un JWT en memoria). Lee [11-credentials-security.md](11-credentials-security.md) antes de integrar.
+
 ## Habilitación
 
 ```dart
