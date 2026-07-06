@@ -2,7 +2,7 @@
 
 ## `UmamiNavigatorObserver`
 
-[`NavigatorObserver`](https://api.flutter.dev/flutter/widgets/NavigatorObserver-class.html) que envía automáticamente un `trackPageView` en cada cambio de ruta relevante. Capa de infraestructura; delega el envío real al [`UmamiCollector`](2-configuracion.md) inyectado.
+[`NavigatorObserver`](https://api.flutter.dev/flutter/widgets/NavigatorObserver-class.html) que envía automáticamente un `trackPageView` en cada cambio de ruta relevante. Capa de infraestructura; delega el envío real al [`UmamiCollector`](2-queue.md) inyectado.
 
 Pasa la instancia al widget que construye `MaterialApp` (o `CupertinoApp`):
 
