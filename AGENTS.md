@@ -105,6 +105,28 @@ Real network, 12 phases, 30+ TCs. Phases 10-11 (API + E2E) run only when `UMAMI_
 - Early returns, short functions, single responsibility.
 - `UmamiConfigOverrides` typedef in `collector_port.dart` — per-call config override map.
 
+### Documentation — dartdoc (mandatory on new/changed code)
+
+Every new or modified public symbol MUST carry `///` dartdoc comments. Inline `//` comments stay optional (only for non-obvious context); dartdoc is the contract for consumers and feeds `doc/api/` (`dart doc` output).
+
+**Minimum required when adding/changing code:**
+
+- **Library** at top of each `lib/src/**/*.dart` file: one `///` block summarizing purpose and layer (`domain`/`application`/`infrastructure`).
+- **Public classes** (`FlutterUmamiAnalytics`, `UmamiPayload`, `UmamiCollector`, `UmamiQueue`, ports, adapters, observer, logger): class-level `///` with intent + responsibilities + ownership layer.
+- **Public constructors**: one `///` line describing required vs optional params and the resulting state.
+- **Public methods/getters** (every `track`, `identify`, `flush`, `dispose`, `pageView`, `enqueue`, `send`, `login`, `init`…): `///` with: what it does, when to call it (ordering vs lifecycle), async/sync, side-effects (enqueue, network, storage, session), null/error semantics.
+- **Public fields/named params** exposed via the barrel or via `UmamiConfigOverrides`: one `///` line stating default, units, and constraints.
+- **Sealed variants** (`UmamiQueueConfig` subclasses): `///` explaining when to pick each variant + storage/limit trade-offs.
+
+**Style:**
+
+- First sentence = imperative summary; Dart analyzer uses it for hover/tooltip.
+- Reference other symbols with `[brackets]` so `dart doc` links them.
+- Do NOT dartdoc trivial `_` private helpers, generated code, or `tool/` scripts.
+- No dartdoc on test files (`test/`).
+
+Verify with `dart doc` (clean run, no broken links) before pushing if you touched public API.
+
 ## Tests
 
 Three files: `flutter_umami_analytics_test.dart` (orchestration/config), `payload_test.dart` (serialization), `queue_test.dart` (queue). All use `flutter_test` and import via the public barrel.
@@ -144,7 +166,7 @@ When the user requests code analysis, apply this checklist and report actionable
 - **Error handling**: explicit — no empty `catch`, no silent failures (see pattern in `factory.dart:_initApiClient`).
 - **Style consistency** with `analysis_options.yaml` conventions.
 - **Cyclomatic complexity**: flag high-complexity blocks and suggest division.
-- **Comments**: self-explanatory code; comments only where they add non-obvious context.
+- **Comments**: self-explanatory code; inline comments only where they add non-obvious context. Dartdoc on public symbols is mandatory — see Documentation section.
 - **Enumerations** preferred over magic strings.
 
 ### Performance
