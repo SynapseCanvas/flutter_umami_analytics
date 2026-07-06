@@ -1,22 +1,63 @@
+/// Immutable runtime configuration consumed by [FlutterUmamiAnalytics].
+///
+/// Part of the domain layer (pure Dart, no Flutter, no http, no sqflite).
+library;
+
 import 'package:flutter_umami_analytics/src/domain/logger/umami_logger.dart';
 import 'package:flutter_umami_analytics/src/domain/models/umami_queue_config.dart';
 
+/// Per-call configuration override map. Supported keys: `websiteId`,
+/// `hostname`, `language`, `userId`. Anything else is ignored. Endpoint,
+/// queue, logger, and lifecycle flags cannot be overridden per call.
 typedef UmamiConfigOverrides = Map<String, dynamic>;
 
+/// Represents the immutable runtime configuration for the [FlutterUmamiAnalytics]
+/// facade. Composed by [createUmamiAnalytics] and threaded through the
+/// concrete tracking collector; every field except [websiteId], [endpoint],
+/// and [hostname] has a sensible default. Layer: domain (pure Dart).
 class FlutterUmamiConfig {
+  /// Umami website id the SDK reports to (required).
   final String websiteId;
+
+  /// Base URL of the Umami instance (required), e.g.
+  /// `https://umami.example.com`.
   final String endpoint;
+
+  /// Hostname attached to every event (required); typically the app's domain.
   final String hostname;
+
+  /// Optional ISO language tag (e.g. `en-US`); null means "use the device
+  /// locale".
   final String? language;
+
+  /// Master switch; when false all track calls are no-ops. Defaults to `true`.
   final bool enabled;
+
+  /// Optional custom user id forwarded with each event.
   final String? userId;
+
+  /// Optional IP override; null lets Umami infer the address from the request.
   final String? ipAddress;
+
+  /// Offline queue strategy. Defaults to [UmamiQueueConfig.inMemory].
   final UmamiQueueConfig queueConfig;
+
+  /// Logger sink used by adapters. Defaults to a plain [UmamiLogger].
   final UmamiLogger logger;
+
+  /// Optional one-shot referrer attached to the first pageview and then
+  /// cleared.
   final String? firstReferrer;
+
+  /// HTTP request timeout for send / login calls. Defaults to 5 seconds.
   final Duration httpTimeout;
+
+  /// Optional logical instance name used to namespace SQLite and secure
+  /// storage keys for multi-instance setups. Null means the default instance.
   final String? instanceName;
 
+  /// Builds the runtime config. [websiteId], [endpoint], and [hostname] are
+  /// required; the rest have defaults documented on each field.
   const FlutterUmamiConfig({
     required this.websiteId,
     required this.endpoint,
@@ -32,6 +73,9 @@ class FlutterUmamiConfig {
     this.instanceName,
   });
 
+  /// Returns a new [FlutterUmamiConfig] with the supplied non-null fields
+  /// overriding the current values. Passing null for a parameter preserves
+  /// the current value.
   FlutterUmamiConfig copyWith({
     String? websiteId,
     String? endpoint,
@@ -62,6 +106,11 @@ class FlutterUmamiConfig {
     );
   }
 
+  /// Returns the same config when `overrides` is null or empty; otherwise
+  /// returns a copy where only the supported keys (`websiteId`, `hostname`,
+  /// `language`, `userId`) are overridden. Endpoint, [enabled], [queueConfig],
+  /// [logger], [firstReferrer], [httpTimeout], [instanceName], and [ipAddress]
+  /// are not per-call overridable.
   FlutterUmamiConfig merge([UmamiConfigOverrides? overrides]) {
     if (overrides == null || overrides.isEmpty) return this;
     return FlutterUmamiConfig(
@@ -99,6 +148,7 @@ class FlutterUmamiConfig {
     return value is String ? value : current;
   }
 
+  /// Value equality over every config field.
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -116,6 +166,7 @@ class FlutterUmamiConfig {
           httpTimeout == other.httpTimeout &&
           instanceName == other.instanceName;
 
+  /// Hash consistent with [operator==].
   @override
   int get hashCode => Object.hash(
         websiteId,

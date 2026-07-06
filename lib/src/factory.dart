@@ -1,3 +1,12 @@
+/// Adapter assembly for the [flutter_umami_analytics] SDK.
+///
+/// Provides [createUmamiAnalytics], the recommended entry point for consumers.
+/// Builds every infrastructure adapter from a [FlutterUmamiConfig] and wires
+/// them into a ready-to-use [FlutterUmamiAnalytics] facade.
+///
+/// Layer: factory.
+library;
+
 import 'package:http/http.dart' as http;
 
 import 'package:flutter_umami_analytics/src/application/umami_analytics.dart';
@@ -15,6 +24,32 @@ import 'package:flutter_umami_analytics/src/infrastructure/queue/queue_factory.d
 const _kFirstOpenEvent = 'first_open';
 const _kFirstOpenUrl = '/app/launch';
 
+/// Assembles a fully wired [FlutterUmamiAnalytics] from a [FlutterUmamiConfig].
+///
+/// Call this during app bootstrap, before [runApp], so the queue is open and
+/// (optionally) the API client is authenticated by the time the UI mounts.
+/// Async: awaits queue opening and optional API login.
+///
+/// Params:
+/// - [config] (required): drives every adapter and the facade.
+/// - [httpClient] (optional): inject to reuse connections or in tests;
+///   otherwise a new `http.Client()` is created internally and disposed by
+///   the facade.
+/// - [deviceId] (optional): inject for testing; otherwise a
+///   [DefaultDeviceIdService] keyed by [FlutterUmamiConfig.instanceName].
+/// - [deviceInfo] (optional): inject for testing; otherwise a
+///   [DefaultDeviceInfoService].
+/// - [recordFirstOpen] (default `false`): when `true`, emits a one-shot
+///   `first_open` event on the first launch (per [FlutterUmamiConfig.instanceName]).
+/// - [enableApi] (default `false`): when `true`, builds a [UmamiApiClient].
+///   Set [apiUsername] / [apiPassword] to also authenticate it.
+/// - [apiUsername] / [apiPassword]: required only when [enableApi] is `true`
+///   and a pre-authenticated client is desired. Login failures degrade
+///   gracefully: the [UmamiApiClient] is returned as `null` and a warning is
+///   logged.
+///
+/// Returns the facade. The caller owns its lifecycle and must call
+/// [FlutterUmamiAnalytics.dispose] when finished.
 Future<FlutterUmamiAnalytics> createUmamiAnalytics(
   FlutterUmamiConfig config, {
   http.Client? httpClient,

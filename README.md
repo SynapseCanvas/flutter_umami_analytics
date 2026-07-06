@@ -254,23 +254,23 @@ Other config fields (`endpoint`, `enabled`, `queueConfig`, `logger`, `firstRefer
 
 Hexagonal (ports & adapters). The `domain/` layer is pure Dart with no Flutter, `http`, `sqflite`, or `flutter_secure_storage` imports — dependencies point inward only. The facade `FlutterUmamiAnalytics` delegates to `TrackingCollector`; `createUmamiAnalytics()` wires default adapters but every port (`UmamiCollector`, `HttpClientPort`, `UmamiQueue`, `DeviceInfoPort`, `DeviceIdPort`, `UmamiApiPort`) is replaceable.
 
-Full diagrams (component graph, tracking flow, queue state machine, dependency graph) in [`doc/architecture.md`](doc/architecture.md).
+Full diagrams (component graph, tracking flow, queue state machine, dependency graph) in [`doc/architecture.md`](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/architecture.md).
 
 ## Documentación
 
-Guías detalladas en español en [`doc/es/`](doc/es/):
+Guías detalladas en español en [`doc/es/`](https://github.com/SynapseCanvas/flutter_umami_analytics/tree/main/doc/es):
 
-- [Inicialización](doc/es/1-initialization.md) — `createUmamiAnalytics()`, `FlutterUmamiConfig`, multiinstancia, ciclo de vida.
-- [Cola](doc/es/2-queue.md) — estrategias (`disabled`, `inMemory`, `persisted`), vaciado automático, vaciado manual.
-- [Seguimiento](doc/es/3-tracking.md) — `trackPageView` y `trackEvent`, parámetros, carga útil automática.
-- [Observador](doc/es/4-observer.md) — `UmamiNavigatorObserver` para seguimiento automático de navegación.
-- [Identificar](doc/es/5-identify.md) — `identify()`, gestión lazy de `sessionId`.
-- [Anulaciones](doc/es/6-overrides.md) — `overrides` por llamada, `firstReferrer`, `ipAddress`.
-- [Dispositivo](doc/es/7-device.md) — ID de dispositivo persistente, información del dispositivo, User-Agent por plataforma.
-- [Registro](doc/es/8-logging.md) — `UmamiLogger`, niveles, devolución de llamada personalizada.
-- [Cliente API](doc/es/9-api-client.md) — cliente REST para consultar Umami.
-- [Avanzado](doc/es/10-advanced.md) — evento `first_open`, collector personalizado, cliente HTTP personalizado, componentes expuestos.
-- [Arquitectura](doc/architecture.md) — diagramas de la arquitectura hexagonal, flujo de seguimiento, máquina de estados de la cola.
+- [Inicialización](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/1-initialization.md) — `createUmamiAnalytics()`, `FlutterUmamiConfig`, multiinstancia, ciclo de vida.
+- [Cola](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/2-queue.md) — estrategias (`disabled`, `inMemory`, `persisted`), vaciado automático, vaciado manual.
+- [Seguimiento](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/3-tracking.md) — `trackPageView` y `trackEvent`, parámetros, carga útil automática.
+- [Observador](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/4-observer.md) — `UmamiNavigatorObserver` para seguimiento automático de navegación.
+- [Identificar](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/5-identify.md) — `identify()`, gestión lazy de `sessionId`.
+- [Anulaciones](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/6-overrides.md) — `overrides` por llamada, `firstReferrer`, `ipAddress`.
+- [Dispositivo](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/7-device.md) — ID de dispositivo persistente, información del dispositivo, User-Agent por plataforma.
+- [Registro](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/8-logging.md) — `UmamiLogger`, niveles, devolución de llamada personalizada.
+- [Cliente API](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/9-api-client.md) — cliente REST para consultar Umami.
+- [Avanzado](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/es/10-advanced.md) — evento `first_open`, collector personalizado, cliente HTTP personalizado, componentes expuestos.
+- [Arquitectura](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/doc/architecture.md) — diagramas de la arquitectura hexagonal, flujo de seguimiento, máquina de estados de la cola.
 
 ## Contributing
 
@@ -278,7 +278,7 @@ Fork, branch, add tests, open PR. Before committing, run `dart analyze` and `flu
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/LICENSE).
 
 ## Acknowledgments
 
