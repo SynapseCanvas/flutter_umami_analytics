@@ -3,6 +3,7 @@ description: Flutter client for Umami Analytics. Track pageviews, events, and se
 version: 1.0.0
 homepage: https://github.com/SynapseCanvas/flutter_umami_analytics
 repository: https://github.com/SynapseCanvas/flutter_umami_analytics
+issue_tracker: https://github.com/SynapseCanvas/flutter_umami_analytics/issues
 documentation: https://github.com/SynapseCanvas/flutter_umami_analytics/blob/main/README.md
 
 topics:
