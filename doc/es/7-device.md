@@ -2,64 +2,86 @@
 
 ## ID de dispositivo persistente
 
-Se genera un UUID v4 por instancia en la primera ejecución y se persiste con `flutter_secure_storage` (Keychain en iOS/macOS, EncryptedSharedPreferences en Android).
+`DefaultDeviceIdService` genera un UUID v4 por instalación en la primera llamada a `getId()` y lo persiste con `flutter_secure_storage` (Keychain en iOS/macOS, EncryptedSharedPreferences en Android).
 
 - iOS/macOS: sobrevive a la reinstalación (Keychain persiste).
-- Android: se pierde al reinstalar o limpiar datos de la app.
+- Android: se pierde al reinstalar o limpiar los datos de la app.
 
-Las claves de secure storage se prefijan con `instanceName`:
+> **Importante:** el ID persistente **no se adjunta automáticamente a los eventos**. Se usa exclusivamente para detectar la primera ejecución y emitir el evento sintético `first_open` cuando pasas `recordFirstOpen: true` a [`createUmamiAnalytics()`](1-initialization.md). Para incluir un identificador estable en cada evento, fija `userId` en `FlutterUmamiConfig` o invoca `identify()` (el campo `id` del payload se rellena con `config.userId ?? sessionId`).
+
+Las claves de secure storage se namespacen con `instanceName` mediante `instanceSuffix()`:
 
 ```text
-umami_device_id_{instanceName}
-umami_first_launch_{instanceName}
+# sin instanceName
+umami_device_id
+umami_first_launch
+
+# con instanceName = "foo"
+umami_device_id_foo
+umami_first_launch_foo
 ```
 
 ### `DeviceIdPort`
 
-Interfaz pública para uso avanzado:
+Contrato del dominio para el identificador persistente. El factory construye `DefaultDeviceIdService` **sólo cuando `recordFirstOpen: true`**; fuera de ese caso el adapter no se instancia y el parámetro `deviceId` de [`createUmamiAnalytics()`](1-initialization.md) se ignora.
+
+Implementación personalizada (el adapter por defecto no se exporta; inyecta tu propio `DeviceIdPort`):
 
 ```dart
-final deviceId = DefaultDeviceIdService(instanceName: 'default');
-final id = await deviceId.getId();
-final first = await deviceId.isFirstLaunch();
-await deviceId.reset();
+class CustomDeviceId implements DeviceIdPort {
+  @override
+  Future<String> getId() async => 'my-stable-id';
+
+  @override
+  Future<bool> isFirstLaunch() async => false;
+
+  @override
+  Future<void> reset() async {/* ... */}
+}
 ```
 
-Inyecta una implementación personalizada pasando `deviceId` a [`create()`](1-initialization.md).
+Inyéctalo vía `deviceId` en [`createUmamiAnalytics()`](1-initialization.md) **junto con `recordFirstOpen: true`**; de lo contrario no tendrá efecto.
 
 ## Información del dispositivo
 
-Recolectado automáticamente en cada evento:
+`DefaultDeviceInfoService.gather()` produce un snapshot [`DeviceInfoData`] inmutable que el `TrackingCollector` lee al construir cada payload:
 
-| Campo              | Origen                                          | Ejemplo               |
-| ------------------ | ----------------------------------------------- | --------------------- |
-| `screenResolution` | `WidgetsBinding.platformDispatcher.views.first` | `1920x1080`           |
-| `locale`           | `WidgetsBinding.platformDispatcher.locale`      | `en_US`               |
-| `platform`         | `dart:io` Platform / `kIsWeb`                   | `ios`/`android`/`web` |
+| Campo              | Origen                                                                | Enviado a Umami | Ejemplo                  |
+| ------------------ | --------------------------------------------------------------------- | --------------- | ------------------------ |
+| `screenResolution` | `WidgetsBinding.instance.platformDispatcher.views.first.physicalSize` | sí (`screen`)   | `1920x1080` (px físicos) |
+| `locale`           | `WidgetsBinding.instance.platformDispatcher.locale.toString()`        | sí (`language`) | `en_US`                  |
+| `platform`         | `PlatformDetector.detect()` (`dart:io` Platform / `kIsWeb`)           | no              | `ios`/`android`/`web`    |
 
-Inyecta una implementación personalizada pasando `deviceInfo` a `create()`:
+> `platform` se recolecta pero **no forma parte del payload**; lo emplea internamente `UserAgentService` para elegir el User-Agent.
+
+El resultado se cachea en memoria tras la primera llamada; invocar `gather()` de nuevo no vuelve a consultar `WidgetsBinding`. Si `platformDispatcher` no está disponible (p. ej. fuera de la zona de Flutter), `screenResolution` y `locale` caen a `"unknown"`.
+
+Inyecta tu propia implementación pasando `deviceInfo` a [`createUmamiAnalytics()`](1-initialization.md):
 
 ```dart
 class CustomDeviceInfo implements DeviceInfoPort {
   @override
   DeviceInfoData gather() => const DeviceInfoData(
-    screenResolution: 'custom',
-    locale: 'custom',
-    platform: 'custom',
+    locale: 'es-ES',
+    screenResolution: '1080x1920',
+    platform: 'android',
   );
 }
 ```
 
 ## User-Agent
 
-El cliente HTTP envía un User-Agent similar a navegador real, seleccionado por plataforma:
+`DefaultHttpClient` fija un User-Agent realista por plataforma vía `UserAgentService.defaultUserAgent`:
 
-| Plataforma | User-Agent emulado |
-| ---------- | ------------------ |
-| Android    | Chrome 120 Mobile  |
-| iOS        | Safari 17 Mobile   |
-| macOS      | Safari 17 Desktop  |
-| Windows    | Chrome 120 Desktop |
-| Linux      | Chrome 120 Desktop |
+| Plataforma        | User-Agent emulado                                            |
+| ----------------- | ------------------------------------------------------------- |
+| Android           | Chrome 120 Mobile (inyecta `Platform.operatingSystemVersion`) |
+| iOS               | Safari 17 Mobile                                              |
+| macOS             | Safari 17 Desktop                                             |
+| Windows           | Chrome 120 Desktop                                            |
+| Linux             | Chrome 120 Desktop                                            |
+| Web / desconocida | `Mozilla/5.0 (compatible; FlutterUmami/1.0)`                  |
 
-Para usar un User-Agent distinto, inyecta tu propio `http.Client` vía el parámetro `httpClient` de [`create()`](1-initialization.md). Ver [10-advanced.md](10-advanced.md).
+El valor se selecciona una sola vez (cacheado en `UserAgentService._cached`) y se reutiliza durante toda la vida del proceso.
+
+Para usar un User-Agent distinto, inyecta tu propio `http.Client` con el parámetro `httpClient` de [`createUmamiAnalytics()`](1-initialization.md) e impón la cabecera `User-Agent` en cada petición `POST` (el adapter interno siempre añade la suya, por lo que tu cliente debe sobrescribirla). Ver [10-advanced.md](10-advanced.md).

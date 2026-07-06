@@ -51,7 +51,8 @@ class TrackingCollector implements UmamiCollector {
       _track(
         logLabel: 'Track pageview',
         overrides: overrides,
-        build: () => _buildPayload(
+        build: (config) => _buildPayload(
+          config,
           url: url,
           title: title,
           referrer: referrer ?? _consumeFirstReferrer(),
@@ -76,7 +77,8 @@ class TrackingCollector implements UmamiCollector {
       _track(
         logLabel: 'Track event',
         overrides: overrides,
-        build: () => _buildPayload(
+        build: (config) => _buildPayload(
+          config,
           url: url ?? _kEventUrl,
           title: title,
           referrer: referrer,
@@ -90,13 +92,14 @@ class TrackingCollector implements UmamiCollector {
 
   Future<bool> _track({
     required String logLabel,
-    required UmamiPayload Function() build,
+    required UmamiPayload Function(FlutterUmamiConfig config) build,
     required UmamiConfigOverrides? overrides,
   }) async {
     if (!_config.enabled) return false;
-    final payload = build();
+    final effectiveConfig = _config.merge(overrides);
+    final payload = build(effectiveConfig);
     _logger.info('$logLabel: ${payload.url} title=${payload.title}');
-    return _send(payload.toJson(), overrides);
+    return _send(payload.toJson());
   }
 
   @override
@@ -116,13 +119,14 @@ class TrackingCollector implements UmamiCollector {
     Map<String, dynamic> properties,
     UmamiConfigOverrides? overrides,
   ) {
+    final effectiveConfig = _config.merge(overrides);
     final payload = UmamiIdentifyPayload(
-      website: _config.websiteId,
+      website: effectiveConfig.websiteId,
       sessionId: resolvedSession,
       data: properties,
     );
     _logger.info('Identify session: $resolvedSession data=$properties');
-    return _send(payload.toJson(), overrides);
+    return _send(payload.toJson());
   }
 
   @override
@@ -194,7 +198,8 @@ class TrackingCollector implements UmamiCollector {
     _httpClient.dispose();
   }
 
-  UmamiPayload _buildPayload({
+  UmamiPayload _buildPayload(
+    FlutterUmamiConfig config, {
     required String url,
     String? title,
     String? referrer,
@@ -206,29 +211,22 @@ class TrackingCollector implements UmamiCollector {
   }) {
     final device = _deviceInfo.gather();
     return UmamiPayload(
-      website: _config.websiteId,
+      website: config.websiteId,
       url: url,
-      hostname: hostname ?? _config.hostname,
-      language: language ?? _config.language ?? device.locale,
+      hostname: hostname ?? config.hostname,
+      language: language ?? config.language ?? device.locale,
       referrer: referrer,
       screen: screen ?? device.screenResolution,
       title: title,
       name: name,
       data: data,
-      id: _config.userId ?? _sessionId,
-      ipAddress: _config.ipAddress,
+      id: config.userId ?? _sessionId,
+      ipAddress: config.ipAddress,
     );
   }
 
-  Future<bool> _send(
-    Map<String, dynamic> body,
-    UmamiConfigOverrides? overrides,
-  ) async {
-    final endpoint = EndpointBuilder.sendEndpoint(
-      (overrides == null || overrides.isEmpty)
-          ? _config.endpoint
-          : _config.merge(overrides).endpoint,
-    );
+  Future<bool> _send(Map<String, dynamic> body) async {
+    final endpoint = EndpointBuilder.sendEndpoint(_config.endpoint);
     final sent = await _httpClient.send(endpoint, body);
     if (!sent) {
       await _enqueue(body);

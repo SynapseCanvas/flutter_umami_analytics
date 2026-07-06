@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_umami_analytics/flutter_umami_analytics.dart';
+import 'package:flutter_umami_analytics/src/infrastructure/collector/tracking_collector.dart';
 
 FlutterUmamiConfig makeConfig({
   String websiteId = 'test-id',
@@ -390,6 +391,106 @@ void main() {
       expect(data.platform, 'android');
     });
   });
+
+  group('TrackingCollector overrides', () {
+    late _CaptureHttpClient http;
+    late TrackingCollector collector;
+
+    setUp(() {
+      http = _CaptureHttpClient();
+      collector = TrackingCollector(
+        config: makeConfig(
+          websiteId: 'site-1',
+          hostname: 'default.com',
+          userId: 'user-1',
+          language: 'en-US',
+        ),
+        httpClient: http,
+        queue: _NoopQueue(),
+        deviceInfo: _FixedDeviceInfo(const DeviceInfoData(
+          screenResolution: '1080x1920',
+          locale: 'en-US',
+          platform: 'test',
+        )),
+      );
+    });
+
+    tearDown(() async => collector.dispose());
+
+    Map<String, dynamic> payloadOf(int index) {
+      final body = http.bodies[index];
+      return (body['payload'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+    }
+
+    test('overrides map applies websiteId, hostname, language, userId',
+        () async {
+      await collector.trackPageView(
+        url: '/x',
+        overrides: {
+          'websiteId': 'site-2',
+          'hostname': 'over.com',
+          'language': 'fr',
+          'userId': 'user-2',
+        },
+      );
+      final payload = payloadOf(0);
+      expect(payload['website'], 'site-2');
+      expect(payload['hostname'], 'over.com');
+      expect(payload['language'], 'fr');
+      expect(payload['id'], 'user-2');
+    });
+
+    test('direct params take precedence over overrides map', () async {
+      await collector.trackPageView(
+        url: '/x',
+        hostname: 'direct.com',
+        language: 'de',
+        overrides: {'hostname': 'over.com', 'language': 'fr'},
+      );
+      final payload = payloadOf(0);
+      expect(payload['hostname'], 'direct.com');
+      expect(payload['language'], 'de');
+    });
+
+    test('overrides apply to trackEvent', () async {
+      await collector.trackEvent(
+        name: 'purchase',
+        url: '/checkout',
+        overrides: {'websiteId': 'site-9', 'hostname': 'shop.com'},
+      );
+      final payload = payloadOf(0);
+      expect(payload['website'], 'site-9');
+      expect(payload['hostname'], 'shop.com');
+    });
+
+    test('overrides apply to identify websiteId', () async {
+      await collector.identify(
+        properties: {'role': 'admin'},
+        overrides: {'websiteId': 'site-id'},
+      );
+      final payload = payloadOf(0);
+      expect(payload['website'], 'site-id');
+    });
+
+    test('non-string overrides fall back to config', () async {
+      await collector.trackPageView(
+        url: '/x',
+        overrides: {'websiteId': 123, 'hostname': false},
+      );
+      final payload = payloadOf(0);
+      expect(payload['website'], 'site-1');
+      expect(payload['hostname'], 'default.com');
+    });
+
+    test('empty overrides preserve config defaults', () async {
+      await collector.trackPageView(url: '/x', overrides: {});
+      final payload = payloadOf(0);
+      expect(payload['website'], 'site-1');
+      expect(payload['hostname'], 'default.com');
+      expect(payload['language'], 'en-US');
+      expect(payload['id'], 'user-1');
+    });
+  });
 }
 
 class _MockCollector implements UmamiCollector {
@@ -446,4 +547,49 @@ class _MockCollector implements UmamiCollector {
   Future<void> dispose() async {
     disposeCalls++;
   }
+}
+
+class _CaptureHttpClient implements HttpClientPort {
+  final List<Map<String, dynamic>> bodies = [];
+
+  @override
+  Future<bool> send(String endpoint, Map<String, dynamic> body) async {
+    bodies.add(body);
+    return true;
+  }
+
+  @override
+  String? get cacheToken => null;
+
+  @override
+  void dispose() {}
+}
+
+class _NoopQueue implements UmamiQueue {
+  @override
+  Future<void> insert(String payload) async {}
+
+  @override
+  Future<List<QueuedEvent>> getAll() async => const <QueuedEvent>[];
+
+  @override
+  Future<void> delete(int id) async {}
+
+  @override
+  Future<void> deleteExpired(Duration ttl) async {}
+
+  @override
+  Future<int> get length async => 0;
+
+  @override
+  Future<void> close() async {}
+}
+
+class _FixedDeviceInfo implements DeviceInfoPort {
+  final DeviceInfoData data;
+
+  _FixedDeviceInfo(this.data);
+
+  @override
+  DeviceInfoData gather() => data;
 }
