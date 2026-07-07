@@ -1,6 +1,6 @@
 name: flutter_umami_analytics
 description: Flutter client for Umami Analytics. Track pageviews, events, and sessions offline with auto-route tracking, persistent device ID, and opt-in REST API.
-version: 1.0.1
+version: 1.1.0
 homepage: https://github.com/SynapseCanvas/flutter_umami_analytics
 repository: https://github.com/SynapseCanvas/flutter_umami_analytics
 issue_tracker: https://github.com/SynapseCanvas/flutter_umami_analytics/issues

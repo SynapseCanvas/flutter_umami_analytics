@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+
+- Feat: `createUmamiAnalytics` now accepts injected `httpClientPort` and `apiClient` (`UmamiApiPort`). Injected ports take precedence over `httpClient`/`enableApi` and are NOT disposed by the facade or collector (caller owns lifecycle). `TrackingCollector.ownsHttpClient` and `FlutterUmamiAnalytics.ownsApiClient` gate disposal (default `true` for backwards compatibility).
+- Feat: `createUmamiAnalytics` now accepts an injected `UmamiQueue`, decoupling queue policy from adapter-selection. Lets callers plug custom storage (Hive, Isar, Realm, ObjectBox, SharedPreferences, etc.) without forking the package. Enqueue-on-failure and TTL-purge-on-flush policies are derived in `_policyFrom` from `UmamiQueueConfig`. The queue is only closed by the collector when it built it.
+- Docs: new `doc/{en,es}/11-credentials-security.md` centralizing the secrets table, two pipelines (tracking vs REST), JWT lifecycle, non-persistence guarantees, best practices and production checklist. Cross-linked from `1-initialization.md` and `9-api-client.md`.
+- Docs: README splits the Documentation section into `doc/en/` and `doc/es/` subsections, each listing all 11 guides.
+
 ## 1.0.1
 
 - Fix: per-call `UmamiConfigOverrides` (`websiteId`, `hostname`, `language`, `userId`) now applied to the outgoing payload in `trackPageView`, `trackEvent`, and `identify`. Previously the merged config was computed but the payload was still built from the base config, so overrides had no effect on those fields.
