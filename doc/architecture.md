@@ -161,8 +161,12 @@ sequenceDiagram
   DHC->>HH: buildBaseHeaders()
   HH->>UAS: UserAgentService.defaultUserAgent
   UAS->>PD: PlatformDetector.detect()
-  Fac->>Q: createQueue(queueConfig, instanceName)
-  Fac->>TC: TrackingCollector(config, http, queue, deviceInfo)
+  alt queue: parameter not provided
+    Fac->>Q: createQueue(queueConfig, instanceName)
+  else queue: parameter provided
+    Fac->>Q: use injected UmamiQueue (caller-owned)
+  end
+  Fac->>TC: TrackingCollector(config, http, queue, ownsQueue, enqueueEnabled, flushPurgeTtl, deviceInfo)
   opt enableApi = true
     Fac->>UAC: UmamiApiClient(baseUrl, logger, client)
     opt apiUsername & apiPassword set
@@ -198,7 +202,7 @@ sequenceDiagram
   else HTTP error / offline
     SRV-->>DHC: error / SocketException
     DHC-->>TC: false
-    alt queueConfig != disabled
+    alt enqueueEnabled (policy: !disabled)
       TC->>Q: insert(jsonEncode(payload))
       Q-->>TC: ok (evict oldest if at capacity)
     end
@@ -223,8 +227,8 @@ sequenceDiagram
   participant DHC as DefaultHttpClient
   participant SRV as Umami Server
 
-  opt queueConfig is PersistedUmamiQueueConfig
-    TC->>Q: deleteExpired(eventTtl)
+  opt flushPurgeTtl is set (policy: persisted eventTtl)
+    TC->>Q: deleteExpired(flushPurgeTtl)
   end
   TC->>Q: getAll()
   Q-->>TC: List<QueuedEvent>
@@ -257,9 +261,9 @@ stateDiagram-v2
   SendTry --> Success: HTTP 200<br/>store x-umami-cache
   SendTry --> Failure: HTTP != 200<br/>or SocketException<br/>or HttpException
 
-  Failure --> CheckQueue: queueConfig?
-  CheckQueue --> StatusEnqueued: disabled → drop event
-  CheckQueue --> QueueInsert: inMemory / persisted
+  Failure --> CheckQueue: enqueueEnabled?
+  CheckQueue --> StatusEnqueued: false → drop event
+  CheckQueue --> QueueInsert: true (inMemory / persisted / custom)
 
   state "insert(payload)" as QueueInsert
   QueueInsert --> AtCapacity: size >= maxSize
@@ -279,7 +283,7 @@ stateDiagram-v2
   FlushManual --> PruneAndDrain
 
   state "processQueue()" as PruneAndDrain
-  PruneAndDrain --> PruneTtl: persisted? deleteExpired(eventTtl)
+  PruneAndDrain --> PruneTtl: flushPurgeTtl set? deleteExpired(flushPurgeTtl)
   PruneTtl --> Iterate: getAll()
   PruneAndDrain --> Iterate: getAll()
   Iterate --> ParallelSend: Future.wait over events
@@ -299,6 +303,9 @@ stateDiagram-v2
     InMemoryQueue & PersistedQueue:
     evict oldest in-place before insert.
     NoopQueue: no-op (queueConfig = disabled).
+    Custom UmamiQueue: honors the port contract;
+    TTL purge only when the factory-derived
+    flushPurgeTtl is non-null.
   end note
 
   note right of Keep

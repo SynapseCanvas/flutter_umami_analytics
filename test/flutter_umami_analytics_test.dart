@@ -644,6 +644,214 @@ void main() {
       expect(http.bodies.length, 1);
     });
   });
+
+  group('TrackingCollector — queue ownership', () {
+    DeviceInfoPort fixedDevice() => _FixedDeviceInfo(const DeviceInfoData(
+          screenResolution: '1x1',
+          locale: 'en',
+          platform: 'test',
+        ));
+
+    test('defaults ownsQueue to true and closes the queue on dispose',
+        () async {
+      final queue = _CountingQueue();
+      final collector = TrackingCollector(
+        config: makeConfig(),
+        httpClient: _CaptureHttpClient(),
+        queue: queue,
+        deviceInfo: fixedDevice(),
+      );
+      await collector.dispose();
+      expect(queue.closeCalls, 1);
+    });
+
+    test('ownsQueue: false does NOT close the queue on dispose', () async {
+      final queue = _CountingQueue();
+      final collector = TrackingCollector(
+        config: makeConfig(),
+        httpClient: _CaptureHttpClient(),
+        queue: queue,
+        deviceInfo: fixedDevice(),
+        ownsQueue: false,
+      );
+      await collector.dispose();
+      expect(queue.closeCalls, 0,
+          reason: 'caller-injected queue must outlive the collector');
+    });
+  });
+
+  group('TrackingCollector — queue policy', () {
+    DeviceInfoPort fixedDevice() => _FixedDeviceInfo(const DeviceInfoData(
+          screenResolution: '1x1',
+          locale: 'en',
+          platform: 'test',
+        ));
+
+    test('enqueueEnabled: false drops send failures without touching the queue',
+        () async {
+      final http = _FailingHttpClient();
+      final queue = _CountingQueue();
+      final collector = TrackingCollector(
+        config: makeConfig(),
+        httpClient: http,
+        queue: queue,
+        deviceInfo: fixedDevice(),
+        enqueueEnabled: false,
+      );
+      addTearDown(collector.dispose);
+
+      final sent = await collector.trackEvent(name: 'drop-me');
+      expect(sent, false);
+      expect(http.sendCalls, 1);
+      expect(queue.inserts, 0,
+          reason: 'disabled policy must bypass the queue entirely');
+    });
+
+    test('enqueueEnabled: true (default) enqueues on send failure', () async {
+      final http = _FailingHttpClient();
+      final queue = _CountingQueue();
+      final collector = TrackingCollector(
+        config: makeConfig(),
+        httpClient: http,
+        queue: queue,
+        deviceInfo: fixedDevice(),
+      );
+      addTearDown(collector.dispose);
+
+      final sent = await collector.trackEvent(name: 'queue-me');
+      expect(sent, false);
+      expect(queue.inserts, 1);
+    });
+
+    test('flushPurgeTtl: null (default) does not call deleteExpired on flush',
+        () async {
+      final queue = _CountingQueue();
+      final collector = TrackingCollector(
+        config: makeConfig(),
+        httpClient: _CaptureHttpClient(),
+        queue: queue,
+        deviceInfo: fixedDevice(),
+      );
+      addTearDown(collector.dispose);
+
+      await collector.flush();
+      expect(queue.deleteExpiredCalls, 0,
+          reason: 'null TTL must skip TTL purge entirely');
+    });
+
+    test('flushPurgeTtl: 10m calls deleteExpired(10m) on flush', () async {
+      final queue = _CountingQueue();
+      const ttl = Duration(minutes: 10);
+      final collector = TrackingCollector(
+        config: makeConfig(),
+        httpClient: _CaptureHttpClient(),
+        queue: queue,
+        deviceInfo: fixedDevice(),
+        flushPurgeTtl: ttl,
+      );
+      addTearDown(collector.dispose);
+
+      await collector.flush();
+      expect(queue.deleteExpiredCalls, 1);
+      expect(queue.lastDeleteExpiredTtl, ttl);
+    });
+  });
+
+  group('Hexagonal port injection — queue wiring (createUmamiAnalytics)', () {
+    DeviceInfoPort fixedDevice() => _FixedDeviceInfo(const DeviceInfoData(
+          screenResolution: '1x1',
+          locale: 'en',
+          platform: 'test',
+        ));
+
+    test('injected UmamiQueue is used and NOT closed on dispose', () async {
+      final queue = _CountingQueue();
+      final analytics = await createUmamiAnalytics(
+        makeConfig(queueConfig: const UmamiQueueConfig.inMemory()),
+        httpClientPort: _FailingHttpClient(),
+        queue: queue,
+        deviceInfo: fixedDevice(),
+      );
+      addTearDown(() async {
+        await analytics.dispose();
+        await queue.close();
+      });
+      await analytics.trackEvent(name: 'x');
+      expect(queue.inserts, 1,
+          reason: 'factory must wire the injected queue into the collector');
+      await analytics.dispose();
+      expect(queue.closeCalls, 0,
+          reason: 'facade must NOT dispose caller-injected UmamiQueue');
+    });
+
+    test(
+        'injected queue + disabled config => enqueueEnabled=false, drops on '
+        'failure', () async {
+      final queue = _CountingQueue();
+      final analytics = await createUmamiAnalytics(
+        makeConfig(queueConfig: const UmamiQueueConfig.disabled()),
+        httpClientPort: _FailingHttpClient(),
+        queue: queue,
+        deviceInfo: fixedDevice(),
+      );
+      addTearDown(() async {
+        await analytics.dispose();
+        await queue.close();
+      });
+      await analytics.trackEvent(name: 'dropped');
+      expect(queue.inserts, 0,
+          reason: 'disabled config + injected queue must still drop events');
+    });
+
+    test(
+        'injected queue + persisted config => flushPurgeTtl derived from '
+        'eventTtl', () async {
+      final queue = _CountingQueue();
+      const ttl = Duration(hours: 6);
+      final analytics = await createUmamiAnalytics(
+        makeConfig(
+          queueConfig: const PersistedUmamiQueueConfig(
+            maxSize: 10,
+            eventTtl: ttl,
+          ),
+        ),
+        queue: queue,
+        deviceInfo: fixedDevice(),
+      );
+      addTearDown(() async {
+        await analytics.dispose();
+        await queue.close();
+      });
+      await analytics.flush();
+      expect(queue.deleteExpiredCalls, 1);
+      expect(queue.lastDeleteExpiredTtl, ttl,
+          reason: 'TTL must come from PersistedUmamiQueueConfig.eventTtl');
+    });
+
+    test(
+        'injected queue + inMemory config (default) => enqueue on failure, '
+        'no TTL purge on flush', () async {
+      final queue = _CountingQueue();
+      final analytics = await createUmamiAnalytics(
+        makeConfig(
+          queueConfig: const UmamiQueueConfig.inMemory(maxSize: 5),
+        ),
+        httpClientPort: _FailingHttpClient(),
+        queue: queue,
+        deviceInfo: fixedDevice(),
+      );
+      addTearDown(() async {
+        await analytics.dispose();
+        await queue.close();
+      });
+      await analytics.trackEvent(name: 'queued');
+      expect(queue.inserts, 1,
+          reason: 'inMemory + injected queue must still enqueue on failure');
+      await analytics.flush();
+      expect(queue.deleteExpiredCalls, 0,
+          reason: 'inMemory config must NOT trigger TTL purge');
+    });
+  });
 }
 
 class _MockCollector implements UmamiCollector {
@@ -855,4 +1063,59 @@ class _CountingApiPort implements UmamiApiPort {
 
   @override
   Future<bool> deleteUser(String id) async => false;
+}
+
+class _CountingQueue implements UmamiQueue {
+  int insertCalls = 0;
+  int deleteExpiredCalls = 0;
+  int closeCalls = 0;
+  Duration? lastDeleteExpiredTtl;
+  final List<String> _payloads = [];
+
+  int get inserts => insertCalls;
+
+  @override
+  Future<void> insert(String payload) async {
+    insertCalls++;
+    _payloads.add(payload);
+  }
+
+  @override
+  Future<List<QueuedEvent>> getAll() async => const <QueuedEvent>[];
+
+  @override
+  Future<void> delete(int id) async {}
+
+  @override
+  Future<void> deleteExpired(Duration ttl) async {
+    deleteExpiredCalls++;
+    lastDeleteExpiredTtl = ttl;
+  }
+
+  @override
+  Future<int> get length async => _payloads.length;
+
+  @override
+  Future<void> close() async {
+    closeCalls++;
+  }
+}
+
+class _FailingHttpClient implements HttpClientPort {
+  int sendCalls = 0;
+  int disposeCalls = 0;
+
+  @override
+  Future<bool> send(String endpoint, Map<String, dynamic> body) async {
+    sendCalls++;
+    return false;
+  }
+
+  @override
+  String? get cacheToken => null;
+
+  @override
+  void dispose() {
+    disposeCalls++;
+  }
 }

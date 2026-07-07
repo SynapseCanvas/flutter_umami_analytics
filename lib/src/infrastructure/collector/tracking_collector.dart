@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter_umami_analytics/src/domain/logger/umami_logger.dart';
 import 'package:flutter_umami_analytics/src/domain/models/umami_config.dart';
 import 'package:flutter_umami_analytics/src/domain/models/umami_payload.dart';
-import 'package:flutter_umami_analytics/src/domain/models/umami_queue_config.dart';
 import 'package:flutter_umami_analytics/src/domain/ports/collector_port.dart';
 import 'package:flutter_umami_analytics/src/domain/ports/device_info_port.dart';
 import 'package:flutter_umami_analytics/src/domain/ports/http_client_port.dart';
@@ -21,6 +20,9 @@ class TrackingCollector implements UmamiCollector {
   final bool _ownsHttpClient;
   final UmamiLogger _logger;
   final UmamiQueue _queue;
+  final bool _ownsQueue;
+  final bool _enqueueEnabled;
+  final Duration? _flushPurgeTtl;
   final DeviceInfoPort _deviceInfo;
 
   String? _firstReferrer;
@@ -30,21 +32,44 @@ class TrackingCollector implements UmamiCollector {
   /// Builds a collector wired to a [config], an [httpClient] port, a [queue],
   /// and a [deviceInfo] provider.
   ///
-  /// Set [ownsHttpClient] to `false` when the caller injects a shared
-  /// [HttpClientPort] that must outlive this collector (e.g. an app-wide HTTP
-  /// adapter). When `true` (default), the collector disposes the port in
-  /// [dispose].
+  /// Policy parameters (declared by the caller, not derived from
+  /// [FlutterUmamiConfig.queueConfig]) keep the adapter ignorant of the
+  /// sealed queue config variants:
+  /// - [enqueueEnabled] (default `true`): when `false`, send failures are
+  ///   dropped without touching the queue. The factory sets this to `false`
+  ///   when [FlutterUmamiConfig.queueConfig] is
+  ///   [UmamiQueueConfig.disabled].
+  /// - [flushPurgeTtl] (default `null`): when non-null, [flush] calls
+  ///   [UmamiQueue.deleteExpired] with this duration before draining. The
+  ///   factory sets this to the TTL declared by
+  ///   [PersistedUmamiQueueConfig.eventTtl] when applicable.
+  ///
+  /// Ownership:
+  /// - [ownsHttpClient] to `false` when the caller injects a shared
+  ///   [HttpClientPort] that must outlive this collector (e.g. an app-wide
+  ///   HTTP adapter). When `true` (default), the collector disposes the
+  ///   port in [dispose].
+  /// - [ownsQueue] to `false` when the caller injects a [UmamiQueue] that
+  ///   must outlive this collector (e.g. a caller-managed Hive / Isar /
+  ///   Realm / ObjectBox adapter). When `true` (default), the collector
+  ///   closes the queue in [dispose].
   TrackingCollector({
     required FlutterUmamiConfig config,
     required HttpClientPort httpClient,
     required UmamiQueue queue,
     required DeviceInfoPort deviceInfo,
     bool ownsHttpClient = true,
+    bool ownsQueue = true,
+    bool enqueueEnabled = true,
+    Duration? flushPurgeTtl,
   })  : _config = config,
         _httpClient = httpClient,
         _ownsHttpClient = ownsHttpClient,
         _logger = config.logger,
         _queue = queue,
+        _ownsQueue = ownsQueue,
+        _enqueueEnabled = enqueueEnabled,
+        _flushPurgeTtl = flushPurgeTtl,
         _deviceInfo = deviceInfo,
         _firstReferrer = config.firstReferrer;
 
@@ -151,8 +176,9 @@ class TrackingCollector implements UmamiCollector {
   }
 
   Future<void> _doFlush() async {
-    if (_config.queueConfig case PersistedUmamiQueueConfig(:final eventTtl)) {
-      await _queue.deleteExpired(eventTtl);
+    final ttl = _flushPurgeTtl;
+    if (ttl != null) {
+      await _queue.deleteExpired(ttl);
     }
 
     final events = await _queue.getAll();
@@ -204,7 +230,9 @@ class TrackingCollector implements UmamiCollector {
       () => flush(),
       onError: (e) => _logger.warning('Flush on dispose failed: $e'),
     );
-    await _queue.close();
+    if (_ownsQueue) {
+      await _queue.close();
+    }
     if (_ownsHttpClient) {
       _httpClient.dispose();
     }
@@ -249,7 +277,7 @@ class TrackingCollector implements UmamiCollector {
   }
 
   Future<void> _enqueue(Map<String, dynamic> body) async {
-    if (_config.queueConfig is DisabledUmamiQueueConfig) return;
+    if (!_enqueueEnabled) return;
     final ok = await safeBool(
       () => _queue.insert(jsonEncode(body)),
       onError: (e) => _logger.warning('Failed to enqueue event: $e'),

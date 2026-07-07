@@ -12,10 +12,12 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_umami_analytics/src/application/umami_analytics.dart';
 import 'package:flutter_umami_analytics/src/domain/logger/umami_logger.dart';
 import 'package:flutter_umami_analytics/src/domain/models/umami_config.dart';
+import 'package:flutter_umami_analytics/src/domain/models/umami_queue_config.dart';
 import 'package:flutter_umami_analytics/src/domain/ports/api_port.dart';
 import 'package:flutter_umami_analytics/src/domain/ports/device_id_port.dart';
 import 'package:flutter_umami_analytics/src/domain/ports/device_info_port.dart';
 import 'package:flutter_umami_analytics/src/domain/ports/http_client_port.dart';
+import 'package:flutter_umami_analytics/src/domain/ports/queue_port.dart';
 import 'package:flutter_umami_analytics/src/infrastructure/api/umami_api_client.dart';
 import 'package:flutter_umami_analytics/src/infrastructure/collector/tracking_collector.dart';
 import 'package:flutter_umami_analytics/src/infrastructure/device/device_id_service.dart';
@@ -47,6 +49,15 @@ const _kFirstOpenUrl = '/app/launch';
 ///   internally and disposed by the facade. Shared between the tracking
 ///   collector (via [DefaultHttpClient]) and the REST API client
 ///   ([UmamiApiClient]) when both apply.
+/// - [queue] (optional): inject a custom [UmamiQueue] adapter (e.g. a
+///   Hive / Isar / Realm / ObjectBox / SharedPreferences-backed queue). When
+///   set, the factory does NOT build a queue from [FlutterUmamiConfig.queueConfig]
+///   and does NOT close it on dispose — the caller owns the lifecycle. Policy
+///   (enqueue on failure, TTL purge on flush) is still derived from
+///   [FlutterUmamiConfig.queueConfig] for backwards compatibility, so set
+///   `queueConfig: const UmamiQueueConfig.disabled()` to drop events on
+///   failure and `queueConfig: const UmamiQueueConfig.persisted(eventTtl: ...)`
+///   to enable TTL purging during flush.
 /// - [apiClient] (optional): inject a pre-built, optionally pre-authenticated
 ///   [UmamiApiPort] for the management REST endpoints. Takes precedence over
 ///   [enableApi]; when set, [enableApi], [apiUsername] and [apiPassword] are
@@ -70,6 +81,7 @@ Future<FlutterUmamiAnalytics> createUmamiAnalytics(
   FlutterUmamiConfig config, {
   HttpClientPort? httpClientPort,
   http.Client? httpClient,
+  UmamiQueue? queue,
   UmamiApiPort? apiClient,
   DeviceIdPort? deviceId,
   DeviceInfoPort? deviceInfo,
@@ -94,13 +106,27 @@ Future<FlutterUmamiAnalytics> createUmamiAnalytics(
     ownsHttpAdapter = true;
   }
 
-  final queue =
-      createQueue(config.queueConfig, instanceName: config.instanceName);
+  final UmamiQueue queueAdapter;
+  final bool ownsQueueAdapter;
+  if (queue != null) {
+    queueAdapter = queue;
+    ownsQueueAdapter = false;
+    logger.info('Using injected UmamiQueue; skipping built-in queue factory');
+  } else {
+    queueAdapter =
+        createQueue(config.queueConfig, instanceName: config.instanceName);
+    ownsQueueAdapter = true;
+  }
+
+  final policy = _policyFrom(config.queueConfig);
   final collector = TrackingCollector(
     config: config,
     httpClient: httpAdapter,
     ownsHttpClient: ownsHttpAdapter,
-    queue: queue,
+    queue: queueAdapter,
+    ownsQueue: ownsQueueAdapter,
+    enqueueEnabled: policy.enqueueEnabled,
+    flushPurgeTtl: policy.flushPurgeTtl,
     deviceInfo: deviceInfo ?? DefaultDeviceInfoService(),
   );
 
@@ -160,6 +186,21 @@ Future<UmamiApiClient?> _initApiClient(
     logger.warning('API login threw: $e\n$st');
     return null;
   }
+}
+
+typedef _QueuePolicy = ({bool enqueueEnabled, Duration? flushPurgeTtl});
+
+/// Derives tracking-collector queue policy from the sealed
+/// [UmamiQueueConfig]. Kept in one place so that policy and adapter-selection
+/// stay consistent whether the queue is built by the factory or injected by
+/// the caller.
+_QueuePolicy _policyFrom(UmamiQueueConfig config) {
+  return switch (config) {
+    DisabledUmamiQueueConfig() => (enqueueEnabled: false, flushPurgeTtl: null),
+    InMemoryUmamiQueueConfig() => (enqueueEnabled: true, flushPurgeTtl: null),
+    PersistedUmamiQueueConfig(:final eventTtl) =>
+      (enqueueEnabled: true, flushPurgeTtl: eventTtl),
+  };
 }
 
 Future<void> _sendFirstOpen(

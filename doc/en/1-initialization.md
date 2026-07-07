@@ -85,8 +85,8 @@ await analytics.dispose();
 
 `dispose()` is idempotent (`_disposed` flag). The actual cascade:
 
-1. `_collector.dispose()` → `flush()` wrapped in `safeAsync` (errors are only logged, not propagated) → `queue.close()` → `httpClient.dispose()`.
-2. In a `finally` block, `apiClient?.dispose()` runs **always**, even if `flush()` threw.
+1. `_collector.dispose()` → `flush()` wrapped in `safeAsync` (errors are only logged, not propagated) → `queue.close()` (only when the collector owns it; injected queues are NOT closed) → `httpClient.dispose()` (only when the collector owns it; injected ports are NOT disposed).
+2. In a `finally` block, `apiClient?.dispose()` runs **always**, even if `flush()` threw (and only when the facade owns the api client).
 
 If you want to force-send the queue without destroying the instance, use `flush()`:
 
@@ -94,7 +94,7 @@ If you want to force-send the queue without destroying the instance, use `flush(
 await analytics.flush();
 ```
 
-`flush()` is reentrant: a `_flushing` flag prevents concurrent executions. If the queue is a `PersistedUmamiQueueConfig`, it first purges expired events (`eventTtl`), then sends in parallel with `Future.wait` and deletes only the ones that succeeded.
+`flush()` is reentrant: a `_flushing` flag prevents concurrent executions. When the policy declares a TTL (derived from `PersistedUmamiQueueConfig.eventTtl` by the factory, or set directly on a `TrackingCollector` built by hand), it first purges expired events via `UmamiQueue.deleteExpired`, then sends in parallel with `Future.wait` and deletes only the ones that succeeded.
 
 ## Instance properties and methods
 

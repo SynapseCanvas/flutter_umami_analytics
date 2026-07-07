@@ -54,10 +54,34 @@ Contract implemented by the three adapters:
 
 The row model is `QueuedEvent` (`domain/models/queued_event.dart`): `{id?, payload, createdAt}`. `id` is `null` in memory and for non-inserted events; SQLite assigns it only in the persisted queue.
 
+## Custom queue adapter (port injection)
+
+The `UmamiQueue` port is public and pluggable: any class that implements the six methods above can replace the built-in queue via the `queue:` parameter of `createUmamiAnalytics`. The factory does not build a queue from `UmamiQueueConfig` when you inject one, and the facade does not close it on `dispose` — your queue outlives the analytics instance.
+
+```dart
+class MyHiveQueue implements UmamiQueue { /* ... */ }
+
+final queue = MyHiveQueue();
+final analytics = await createUmamiAnalytics(
+  config,
+  queue: queue,            // caller owns the lifecycle
+);
+```
+
+Policy (enqueue on failure, TTL purge on flush) is still derived from `FlutterUmamiConfig.queueConfig` for backwards compatibility. Pair the injection with the right config:
+
+| `queueConfig`                             | enqueue on failure | TTL purge on flush |
+| ----------------------------------------- | ------------------ | ------------------ |
+| `UmamiQueueConfig.disabled()`             | no (drop)          | no                 |
+| `UmamiQueueConfig.inMemory(maxSize: n)`   | yes                | no                 |
+| `UmamiQueueConfig.persisted(eventTtl: x)` | yes                | yes (TTL = `x`)    |
+
+`persisted` is the right choice when your custom queue benefits from TTL eviction; `disabled` when you handle offline storage yourself and only want fire-and-forget semantics.
+
 ## Behavior
 
 1. `trackPageView`, `trackEvent`, and `identify` build their `UmamiPayload` and pass it to `_send`.
-2. `_send` attempts the send via HTTP. On failure → `_enqueue` serializes the payload to JSON (`jsonEncode`) and inserts it. With `disabled()`, `_enqueue` short-circuits with an early `return` upon detecting `DisabledUmamiQueueConfig` — the event is discarded without ever touching the queue (`NoopQueue.insert` itself is also a no-op, but it is never reached).
+2. `_send` attempts the send via HTTP. On failure → `_enqueue` serializes the payload to JSON (`jsonEncode`) and inserts it, gated on the `enqueueEnabled` policy. With `disabled()` (or any caller setting `enqueueEnabled: false`), `_enqueue` short-circuits with an early `return` — the event is discarded without ever touching the queue.
 3. If the send succeeds → `_autoFlush()` runs, draining the pending queue (see below).
 4. If the queue is full (`length >= maxSize`), the oldest events are removed **before** inserting:
    - `InMemoryQueue`: `while` loop that removes entries until below `maxSize`.
@@ -76,7 +100,7 @@ await analytics.flush();
 
 Extra resilience: if a queued payload cannot be decoded as JSON (`QueuedEvent.decodedPayload == null`, e.g. a corrupted row), `_flushOne` deletes it directly and returns `false` — it is not retried indefinitely.
 
-> The TTL purge during flushing only applies to `UmamiQueueConfig.persisted()`: `_doFlush` switches on the config and calls `deleteExpired(eventTtl)` only for `PersistedUmamiQueueConfig`, since `eventTtl` lives exclusively in that variant. The `disabled` and `inMemory` strategies ignore TTL during flushing.
+> The TTL purge during flushing only applies when the `flushPurgeTtl` policy is non-null. The factory sets it to `PersistedUmamiQueueConfig.eventTtl` for the `persisted` strategy and to `null` for `disabled` / `inMemory`. When you inject a custom queue, the same derivation applies unless you bypass it by constructing `TrackingCollector` directly (advanced).
 
 ## See also
 

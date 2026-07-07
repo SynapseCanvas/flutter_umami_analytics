@@ -85,8 +85,8 @@ await analytics.dispose();
 
 `dispose()` es idempotente (bandera `_disposed`). La cascada real:
 
-1. `_collector.dispose()` → `flush()` envuelto en `safeAsync` (errores sólo se loguean, no propagan) → `queue.close()` → `httpClient.dispose()`.
-2. En un bloque `finally`, `apiClient?.dispose()` se ejecuta **siempre**, incluso si `flush()` lanzó.
+1. `_collector.dispose()` → `flush()` envuelto en `safeAsync` (errores sólo se loguean, no propagan) → `queue.close()` (sólo cuando el collector es dueño; las colas inyectadas NO se cierran) → `httpClient.dispose()` (sólo cuando el collector es dueño; los puertos inyectados NO se cierran).
+2. En un bloque `finally`, `apiClient?.dispose()` se ejecuta **siempre**, incluso si `flush()` lanzó (y sólo cuando la fachada es dueña del api client).
 
 Si quieres forzar el envío de la cola sin destruir la instancia, usa `flush()`:
 
@@ -94,7 +94,7 @@ Si quieres forzar el envío de la cola sin destruir la instancia, usa `flush()`:
 await analytics.flush();
 ```
 
-`flush()` es reentrante: una bandera `_flushing` evita ejecuciones concurrentes. Si la cola es `PersistedUmamiQueueConfig`, primero purga eventos caducados (`eventTtl`), después envía en paralelo con `Future.wait` y borra sólo los que tuvieron éxito.
+`flush()` es reentrante: una bandera `_flushing` evita ejecuciones concurrentes. Cuando la política declara un TTL (derivado del `eventTtl` de `PersistedUmamiQueueConfig` por la factory, o fijado directamente en un `TrackingCollector` construido a mano), primero purga eventos caducados vía `UmamiQueue.deleteExpired`, después envía en paralelo con `Future.wait` y borra sólo los que tuvieron éxito.
 
 ## Propiedades y métodos de instancia
 

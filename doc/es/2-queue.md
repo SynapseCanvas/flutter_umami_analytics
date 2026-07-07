@@ -54,10 +54,34 @@ Contrato que implementan los tres adaptadores:
 
 El modelo de fila es `QueuedEvent` (`domain/models/queued_event.dart`): `{id?, payload, createdAt}`. `id` es `null` en memoria y en eventos no insertados; lo asigna SQLite sólo en la cola persistida.
 
+## Adaptador de cola personalizado (inyección por puerto)
+
+El puerto `UmamiQueue` es público y enchufable: cualquier clase que implemente los seis métodos anteriores puede reemplazar la cola interna mediante el parámetro `queue:` de `createUmamiAnalytics`. La factory no construye una cola a partir de `UmamiQueueConfig` cuando la inyectas, y la fachada no la cierra en `dispose` — tu cola sobrevive a la instancia de analytics.
+
+```dart
+class MyHiveQueue implements UmamiQueue { /* ... */ }
+
+final queue = MyHiveQueue();
+final analytics = await createUmamiAnalytics(
+  config,
+  queue: queue,            // el llamador es dueño del ciclo de vida
+);
+```
+
+La política (encolar en fallo, purga TTL en vaciado) se sigue derivando de `FlutterUmamiConfig.queueConfig` por compatibilidad hacia atrás. Empareja la inyección con la config adecuada:
+
+| `queueConfig`                             | encolar en fallo | purga TTL en vaciado |
+| ----------------------------------------- | ---------------- | -------------------- |
+| `UmamiQueueConfig.disabled()`             | no (descarta)    | no                   |
+| `UmamiQueueConfig.inMemory(maxSize: n)`   | sí               | no                   |
+| `UmamiQueueConfig.persisted(eventTtl: x)` | sí               | sí (TTL = `x`)       |
+
+`persisted` es la opción correcta cuando tu cola custom se beneficia de la eviction por TTL; `disabled` cuando gestionas el almacenamiento offline fuera y sólo quieres semántica fire-and-forget.
+
 ## Comportamiento
 
 1. `trackPageView`, `trackEvent` e `identify` construyen su `UmamiPayload` y lo pasan a `_send`.
-2. `_send` intenta el envío vía HTTP. Si falla → `_enqueue` serializa el payload a JSON (`jsonEncode`) y lo inserta. Con `disabled()`, `_enqueue` cortocircuita con un `return` temprano al detectar `DisabledUmamiQueueConfig` — el evento se descarta sin llegar a tocar la cola (la propia `NoopQueue.insert` también es no-op, pero no se alcanza).
+2. `_send` intenta el envío vía HTTP. Si falla → `_enqueue` serializa el payload a JSON (`jsonEncode`) y lo inserta, controlado por la política `enqueueEnabled`. Con `disabled()` (o si el llamador fija `enqueueEnabled: false`), `_enqueue` cortocircuita con un `return` temprano — el evento se descarta sin llegar a tocar la cola.
 3. Si el envío tiene éxito → se ejecuta `_autoFlush()`, que drena la cola pendiente (ver más abajo).
 4. Si la cola está llena (`length >= maxSize`), se eliminan los eventos más antiguos **antes** de insertar:
    - `InMemoryQueue`: bucle `while` que retira entradas hasta quedar por debajo de `maxSize`.
@@ -76,7 +100,7 @@ await analytics.flush();
 
 Resiliencia extra: si un payload encolado no se puede decodificar como JSON (`QueuedEvent.decodedPayload == null`, p.ej. fila corrupta), `_flushOne` lo borra directamente y devuelve `false` — no se reintenta indefinidamente.
 
-> La purga TTL durante el vaciado sólo aplica a `UmamiQueueConfig.persisted()`: `_doFlush` hace `switch` sobre la config y llama a `deleteExpired(eventTtl)` únicamente para `PersistedUmamiQueueConfig`, ya que `eventTtl` vive exclusivamente en esa variante. Las estrategias `disabled` e `inMemory` ignoran el TTL durante el vaciado.
+> La purga TTL durante el vaciado sólo aplica cuando la política `flushPurgeTtl` es no-nula. La factory la fija al `eventTtl` de `PersistedUmamiQueueConfig` para la estrategia `persisted` y a `null` para `disabled` / `inMemory`. Cuando inyectas una cola custom, se aplica la misma derivación a menos que la esquives construyendo `TrackingCollector` directamente (uso avanzado).
 
 ## Ver también
 
