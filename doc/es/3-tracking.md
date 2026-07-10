@@ -40,17 +40,17 @@ await analytics.trackEvent(
 
 ### Parámetros
 
-| Parámetro   | Tipo                    | Requerido | Descripción                             |
-| ----------- | ----------------------- | --------- | --------------------------------------- |
-| `name`      | `String`                | sí        | Nombre del evento                       |
-| `url`       | `String?`               | no        | URL asociada (predeterminado: `/event`) |
-| `title`     | `String?`               | no        | Título de la página                     |
-| `referrer`  | `String?`               | no        | URL de referencia                       |
-| `data`      | `Map<String, dynamic>?` | no        | Datos adicionales del evento            |
-| `hostname`  | `String?`               | no        | Anulación de hostname                   |
-| `language`  | `String?`               | no        | Anulación de idioma                     |
-| `screen`    | `String?`               | no        | Anulación de resolución                 |
-| `overrides` | `Map<String, dynamic>?` | no        | Anulaciones por llamada                 |
+| Parámetro   | Tipo                    | Requerido | Descripción                                                                                      |
+| ----------- | ----------------------- | --------- | ------------------------------------------------------------------------------------------------ |
+| `name`      | `String`                | sí        | Nombre del evento                                                                                |
+| `url`       | `String?`               | no        | URL asociada (predeterminado: `FlutterUmamiConfig.defaultEventUrl`, que por defecto es `/event`) |
+| `title`     | `String?`               | no        | Título de la página                                                                              |
+| `referrer`  | `String?`               | no        | URL de referencia                                                                                |
+| `data`      | `Map<String, dynamic>?` | no        | Datos adicionales del evento                                                                     |
+| `hostname`  | `String?`               | no        | Anulación de hostname                                                                            |
+| `language`  | `String?`               | no        | Anulación de idioma                                                                              |
+| `screen`    | `String?`               | no        | Anulación de resolución                                                                          |
+| `overrides` | `Map<String, dynamic>?` | no        | Anulaciones por llamada                                                                          |
 
 ## Valor de retorno
 

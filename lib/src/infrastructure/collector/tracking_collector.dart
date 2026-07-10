@@ -13,7 +13,6 @@ import 'package:uuid/uuid.dart';
 
 class TrackingCollector implements UmamiCollector {
   static const _uuid = Uuid();
-  static const _kEventUrl = '/event';
 
   final FlutterUmamiConfig _config;
   final HttpClientPort _httpClient;
@@ -114,7 +113,7 @@ class TrackingCollector implements UmamiCollector {
         overrides: overrides,
         build: (config) => _buildPayload(
           config,
-          url: url ?? _kEventUrl,
+          url: url ?? _config.defaultEventUrl,
           title: title,
           referrer: referrer,
           hostname: hostname,

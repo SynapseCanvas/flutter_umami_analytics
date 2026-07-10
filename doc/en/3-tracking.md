@@ -40,17 +40,17 @@ await analytics.trackEvent(
 
 ### Parameters
 
-| Parameter   | Type                    | Required | Description                        |
-| ----------- | ----------------------- | -------- | ---------------------------------- |
-| `name`      | `String`                | yes      | Event name                         |
-| `url`       | `String?`               | no       | Associated URL (default: `/event`) |
-| `title`     | `String?`               | no       | Page title                         |
-| `referrer`  | `String?`               | no       | Referrer URL                       |
-| `data`      | `Map<String, dynamic>?` | no       | Additional event data              |
-| `hostname`  | `String?`               | no       | Hostname override                  |
-| `language`  | `String?`               | no       | Language override                  |
-| `screen`    | `String?`               | no       | Resolution override                |
-| `overrides` | `Map<String, dynamic>?` | no       | Per-call overrides                 |
+| Parameter   | Type                    | Required | Description                                                                                |
+| ----------- | ----------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `name`      | `String`                | yes      | Event name                                                                                 |
+| `url`       | `String?`               | no       | Associated URL (default: `FlutterUmamiConfig.defaultEventUrl`, which defaults to `/event`) |
+| `title`     | `String?`               | no       | Page title                                                                                 |
+| `referrer`  | `String?`               | no       | Referrer URL                                                                               |
+| `data`      | `Map<String, dynamic>?` | no       | Additional event data                                                                      |
+| `hostname`  | `String?`               | no       | Hostname override                                                                          |
+| `language`  | `String?`               | no       | Language override                                                                          |
+| `screen`    | `String?`               | no       | Resolution override                                                                        |
+| `overrides` | `Map<String, dynamic>?` | no       | Per-call overrides                                                                         |
 
 ## Return value
 

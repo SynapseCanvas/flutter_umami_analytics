@@ -15,6 +15,7 @@ FlutterUmamiConfig makeConfig({
   String? ipAddress,
   String? firstReferrer,
   String? language,
+  String? defaultEventUrl,
 }) {
   return FlutterUmamiConfig(
     websiteId: websiteId,
@@ -29,6 +30,7 @@ FlutterUmamiConfig makeConfig({
     ipAddress: ipAddress,
     firstReferrer: firstReferrer,
     language: language,
+    defaultEventUrl: defaultEventUrl ?? kDefaultEventUrl,
   );
 }
 
@@ -179,6 +181,75 @@ void main() {
       );
       final copy = config.copyWith();
       expect(copy.instanceName, 'my-instance');
+    });
+
+    test('default defaultEventUrl is kDefaultEventUrl (/event)', () {
+      const config = FlutterUmamiConfig(
+        websiteId: 'test-id',
+        endpoint: 'https://example.com',
+        hostname: 'test.com',
+      );
+      expect(config.defaultEventUrl, kDefaultEventUrl);
+      expect(config.defaultEventUrl, '/event');
+    });
+
+    test('defaultEventUrl is preserved in copyWith', () {
+      const config = FlutterUmamiConfig(
+        websiteId: 'test-id',
+        endpoint: 'https://example.com',
+        hostname: 'test.com',
+        defaultEventUrl: '/app/event',
+      );
+      final copy = config.copyWith(websiteId: 'other');
+      expect(copy.defaultEventUrl, '/app/event');
+    });
+
+    test('copyWith overrides defaultEventUrl', () {
+      const config = FlutterUmamiConfig(
+        websiteId: 'test-id',
+        endpoint: 'https://example.com',
+        hostname: 'test.com',
+      );
+      expect(config.copyWith(defaultEventUrl: '/x').defaultEventUrl, '/x');
+    });
+
+    test('merge preserves defaultEventUrl (not per-call overridable)', () {
+      const config = FlutterUmamiConfig(
+        websiteId: 'test-id',
+        endpoint: 'https://example.com',
+        hostname: 'test.com',
+        defaultEventUrl: '/app/event',
+      );
+      final merged = config.merge({
+        'defaultEventUrl': '/should-be-ignored',
+        'websiteId': 'new',
+      });
+      expect(merged.defaultEventUrl, '/app/event');
+      expect(merged.websiteId, 'new');
+    });
+
+    test('equality and hashCode include defaultEventUrl', () {
+      const a = FlutterUmamiConfig(
+        websiteId: 'id',
+        endpoint: 'https://example.com',
+        hostname: 'h',
+        defaultEventUrl: '/a',
+      );
+      const b = FlutterUmamiConfig(
+        websiteId: 'id',
+        endpoint: 'https://example.com',
+        hostname: 'h',
+        defaultEventUrl: '/a',
+      );
+      const c = FlutterUmamiConfig(
+        websiteId: 'id',
+        endpoint: 'https://example.com',
+        hostname: 'h',
+        defaultEventUrl: '/b',
+      );
+      expect(a, b);
+      expect(a.hashCode, b.hashCode);
+      expect(a == c, isFalse);
     });
   });
 
@@ -489,6 +560,51 @@ void main() {
       expect(payload['hostname'], 'default.com');
       expect(payload['language'], 'en-US');
       expect(payload['id'], 'user-1');
+    });
+  });
+
+  group('TrackingCollector — defaultEventUrl', () {
+    late _CaptureHttpClient http;
+
+    TrackingCollector buildCollector({String? defaultEventUrl}) {
+      http = _CaptureHttpClient();
+      return TrackingCollector(
+        config: makeConfig(defaultEventUrl: defaultEventUrl),
+        httpClient: http,
+        queue: _NoopQueue(),
+        deviceInfo: _FixedDeviceInfo(const DeviceInfoData(
+          screenResolution: '1080x1920',
+          locale: 'en-US',
+          platform: 'test',
+        )),
+      );
+    }
+
+    Map<String, dynamic> payloadOf(int index) {
+      final body = http.bodies[index];
+      return (body['payload'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+    }
+
+    test('trackEvent without url falls back to kDefaultEventUrl (/event)',
+        () async {
+      final collector = buildCollector();
+      addTearDown(collector.dispose);
+      await collector.trackEvent(name: 'signup');
+      expect(payloadOf(0)['url'], kDefaultEventUrl);
+    });
+
+    test('trackEvent honors custom defaultEventUrl from config', () async {
+      final collector = buildCollector(defaultEventUrl: '/app/event');
+      addTearDown(collector.dispose);
+      await collector.trackEvent(name: 'purchase');
+      expect(payloadOf(0)['url'], '/app/event');
+    });
+
+    test('explicit url takes precedence over defaultEventUrl', () async {
+      final collector = buildCollector(defaultEventUrl: '/app/event');
+      addTearDown(collector.dispose);
+      await collector.trackEvent(name: 'purchase', url: '/checkout');
+      expect(payloadOf(0)['url'], '/checkout');
     });
   });
 

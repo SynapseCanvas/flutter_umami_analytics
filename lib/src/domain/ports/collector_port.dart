@@ -45,7 +45,8 @@ abstract class UmamiCollector {
   ///
   /// Parameters:
   /// - [name] (required): event identifier tracked by Umami.
-  /// - [url]: optional page path; defaults to a synthetic `/event` url when
+  /// - [url]: optional page path; defaults to
+  ///   [FlutterUmamiConfig.defaultEventUrl] (`/event` out of the box) when
   ///   omitted.
   /// - [title]: optional human-readable context title.
   /// - [referrer]: previous page url; never consumed on event tracks.

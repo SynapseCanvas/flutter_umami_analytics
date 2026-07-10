@@ -11,6 +11,12 @@ import 'package:flutter_umami_analytics/src/domain/models/umami_queue_config.dar
 /// queue, logger, and lifecycle flags cannot be overridden per call.
 typedef UmamiConfigOverrides = Map<String, dynamic>;
 
+/// Default URL attached to [FlutterUmamiAnalytics.trackEvent] calls that omit
+/// the `url` argument. Matches the synthetic path historically emitted by the
+/// SDK (`/event`) so existing Umami dashboards keep grouping events the same
+/// way. Override at init time via [FlutterUmamiConfig.defaultEventUrl].
+const String kDefaultEventUrl = '/event';
+
 /// Represents the immutable runtime configuration for the [FlutterUmamiAnalytics]
 /// facade. Composed by [createUmamiAnalytics] and threaded through the
 /// concrete tracking collector; every field except [websiteId], [endpoint],
@@ -56,6 +62,12 @@ class FlutterUmamiConfig {
   /// storage keys for multi-instance setups. Null means the default instance.
   final String? instanceName;
 
+  /// URL attached to `trackEvent` calls that do not pass an explicit `url`.
+  /// Defaults to [kDefaultEventUrl] (`/event`). Override at init time when
+  /// you want all events to report a different path (e.g. `/app/event`).
+  /// Per-call `url` arguments always take precedence.
+  final String defaultEventUrl;
+
   /// Builds the runtime config. [websiteId], [endpoint], and [hostname] are
   /// required; the rest have defaults documented on each field.
   const FlutterUmamiConfig({
@@ -71,6 +83,7 @@ class FlutterUmamiConfig {
     this.firstReferrer,
     this.httpTimeout = const Duration(seconds: 5),
     this.instanceName,
+    this.defaultEventUrl = kDefaultEventUrl,
   });
 
   /// Returns a new [FlutterUmamiConfig] with the supplied non-null fields
@@ -89,6 +102,7 @@ class FlutterUmamiConfig {
     String? firstReferrer,
     Duration? httpTimeout,
     String? instanceName,
+    String? defaultEventUrl,
   }) {
     return FlutterUmamiConfig(
       websiteId: websiteId ?? this.websiteId,
@@ -103,14 +117,15 @@ class FlutterUmamiConfig {
       firstReferrer: firstReferrer ?? this.firstReferrer,
       httpTimeout: httpTimeout ?? this.httpTimeout,
       instanceName: instanceName ?? this.instanceName,
+      defaultEventUrl: defaultEventUrl ?? this.defaultEventUrl,
     );
   }
 
   /// Returns the same config when `overrides` is null or empty; otherwise
   /// returns a copy where only the supported keys (`websiteId`, `hostname`,
   /// `language`, `userId`) are overridden. Endpoint, [enabled], [queueConfig],
-  /// [logger], [firstReferrer], [httpTimeout], [instanceName], and [ipAddress]
-  /// are not per-call overridable.
+  /// [logger], [firstReferrer], [httpTimeout], [instanceName], [ipAddress],
+  /// and [defaultEventUrl] are not per-call overridable.
   FlutterUmamiConfig merge([UmamiConfigOverrides? overrides]) {
     if (overrides == null || overrides.isEmpty) return this;
     return FlutterUmamiConfig(
@@ -126,6 +141,7 @@ class FlutterUmamiConfig {
       httpTimeout: httpTimeout,
       instanceName: instanceName,
       ipAddress: ipAddress,
+      defaultEventUrl: defaultEventUrl,
     );
   }
 
@@ -164,7 +180,8 @@ class FlutterUmamiConfig {
           logger == other.logger &&
           firstReferrer == other.firstReferrer &&
           httpTimeout == other.httpTimeout &&
-          instanceName == other.instanceName;
+          instanceName == other.instanceName &&
+          defaultEventUrl == other.defaultEventUrl;
 
   /// Hash consistent with [operator==].
   @override
@@ -181,5 +198,6 @@ class FlutterUmamiConfig {
         firstReferrer,
         httpTimeout,
         instanceName,
+        defaultEventUrl,
       );
 }

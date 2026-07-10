@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+
+- Feat: `FlutterUmamiConfig.defaultEventUrl` lets you define the URL assigned to `trackEvent` calls that omit the `url` argument at init time. Defaults to the new public constant `kDefaultEventUrl` (`/event`), preserving backwards compatibility with existing Umami dashboards. An explicit per-call `url` always takes precedence. `TrackingCollector` now reads the default from config instead of a hardcoded `/event` constant. The field is part of `copyWith`, value equality, and `hashCode`; it is not per-call overridable via `UmamiConfigOverrides` (same policy as `endpoint` and `httpTimeout`).
+- Docs: `doc/{en,es}/1-initialization.md` document the new `defaultEventUrl` config field; `doc/{en,es}/3-tracking.md` clarify the `trackEvent` `url` default now resolves from `FlutterUmamiConfig.defaultEventUrl`.
+
 ## 1.1.0
 
 - Feat: `createUmamiAnalytics` now accepts injected `httpClientPort` and `apiClient` (`UmamiApiPort`). Injected ports take precedence over `httpClient`/`enableApi` and are NOT disposed by the facade or collector (caller owns lifecycle). `TrackingCollector.ownsHttpClient` and `FlutterUmamiAnalytics.ownsApiClient` gate disposal (default `true` for backwards compatibility).
